@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+ <head>
+   <meta charset="utf-8">
+   <title>Test html</title>
+   <style>
+    body {
+     margin-left:100px;
+     margin-right:50px;
+     background-color: rgb(182,145,66);
+    }
+   </style>
+ </head>
+ <body>
+  <a href="2.jpg"><img src="2.jpg" width="300"></a>
+  <p></p>
+  <p>---------------------------------------------------------------</p>
+  <h4>Perl</h4>
+  <form action="/cgi-bin/perl/env.pl" method="get" target="_blank">
+    <input type="hidden" name="par1" value="aaa">
+    <input type="submit" value="env.pl(get)">
+  </form>
+  <form action="/cgi-bin/perl/env.pl" method="post" target="_blank">
+    <input type="hidden" name="par1" value="aaa">
+    <input type="submit" value="env.pl(post)">
+  </form>
+  <br>
+  <form action="/cgi-bin/perl/submit.pl" method="GET" target="_blank">
+    <input type="hidden" name="firstname" value="use method:">
+    <input type="hidden" name="lastname" value="get">
+    <input type="submit" value="submit.pl(get)">
+  </form>
+  <form action="/cgi-bin/perl/submit.pl" method="post" target="_blank">
+    <input type="hidden" name="firstname" value="use method:">
+    <input type="hidden" name="lastname" value="post">
+    <input type="submit" value="submit.pl(post)">
+  </form>
+  <br>
+  <form action="/cgi-bin/perl/upload.pl" method="post" target="_blank">
+    <input type="submit" value="/cgi-bin/perl/upload.pl">
+  </form>
+  <p>---------------------------------------------------------------</p>
+  <h4>PHP</h4>
+  <form action="php/env.php" method="get" target="_blank">
+        <input type="hidden" name="name" value="123">
+        <input type="submit" value="env.php(get)">
+  </form>
+    <form action="php/env.php" method="post" target="_blank">
+    <input type="hidden" name="name" value="123">
+    <input type="submit" value="env.php(post)">
+  </form>
+  <br>
+  <form action="php/submit.php" method="GET" target="_blank">
+    <input type="hidden" name="firstname" value="use method:">
+    <input type="hidden" name="lastname" value="get">
+    <input type="submit" value="submit.php(get)">
+  </form>
+  <form action="php/submit.php" method="post" target="_blank">
+    <input type="hidden" name="firstname" value="use method:">
+    <input type="hidden" name="lastname" value="post">
+    <input type="submit" value="submit.php(post)">
+  </form>
+  <p>---------------------------------------------------------------</p>
+  <h4>Python</h4>
+  <form action="/cgi-bin/python/env.py" method="get" target="_blank">
+    <input type="hidden" name="par1" value="aaa">
+    <input type="submit" value="env.py(get)">
+  </form>
+  <form action="/cgi-bin/python/env.py" method="post" target="_blank">
+    <input type="hidden" name="firstname" value="use method:">
+    <input type="hidden" name="lastname" value="post">
+    <input type="submit" value="env.py(post)">
+  </form>   
+  <p>---------------------------------------------------------------</p>
+  <h4>C</h4>
+  <form action="/cgi-bin/script" method="GET" target="_blank">
+    <input type="hidden" name="firstname" value="aaa">
+    <input type="hidden" name="lastname" value="bbb">
+    <input type="submit" value="script(get)">
+  </form>
+  <br>
+  <form action="/cgi-bin/script" method="POST" target="_blank">
+    <input type="hidden" name="firstname" value="aaa">
+    <input type="hidden" name="lastname" value="bbb">
+    <input type="submit" value="script(post)">
+  </form>
+  <p>---------------------------------------------------------------</p>
+  <h4>FastCGI</h4>
+  <form action="/env" method="get" target="_blank">
+    <input type="hidden" name="name" value="123">
+    <input type="submit" value="fastcgi/env(get)">
+  </form>
+  <form action="/env" method="post" target="_blank">
+    <input type="hidden" name="name" value="123">
+    <input type="submit" value="fastcgi/env(post)">
+  </form>
+  <br>
+  <form action="/test2" method="get" target="_blank">
+    <input type="hidden" name="name" value="123">
+    <input type="submit" value="fastcgi/test2(get)">
+  </form>
+  <hr>
+  <p id="time"></p>
+  <script>
+    var d = new Date();
+    document.getElementById("time").innerHTML = d.toString();
+  </script>
+ </body>
+</html>
