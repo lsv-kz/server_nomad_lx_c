@@ -1,5 +1,5 @@
 #!/usr/bin/perl -w
-# uploadl.cgi
+
 use strict;
 use URI::Escape;
 use Encode;
@@ -46,7 +46,7 @@ print header(-TYPE =>"text/html; charset=\"utf-8\"");
 print start_html('example');
 printf "<p>Name file:%s; %d bytes</p>\n",$File_Name, -s "$path";
 printf "<p>Type MIME:%s</p>\n", $Mime;
-print "<form action=\"perl_upload.pl\" enctype=\"multipart/form-data\" method=\"post\"><br>\n";
+print "<form action=\"upload.pl\" enctype=\"multipart/form-data\" method=\"post\"><br>\n";
 print "What files are you sending? <input type=\"file\" name=\"filename\"><br>\n";
 print "<input type=\"submit\" value=\"Upload\"> <input type=\"reset\"><br>\n";
 print "</form>\n";
@@ -73,7 +73,7 @@ sub error {
 		p( "Your upload was not procesed because the following error ",
                  "occured: " ),
 		p( i( $reason ) );
-	print "<form action=\"perl_upload.pl\" enctype=\"multipart/form-data\" method=\"post\"><br>\n";
+	print "<form action=\"upload.pl\" enctype=\"multipart/form-data\" method=\"post\"><br>\n";
 	print "What files are you sending? <input type=\"file\" name=\"filename\"><br>\n";
 	print "<input type=\"submit\" value=\"Upload\"> <input type=\"reset\"><br>\n";
 	print "</form>\n";

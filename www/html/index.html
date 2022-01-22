@@ -15,6 +15,9 @@
   <a href="2.jpg"><img src="2.jpg" width="300"></a>
   <p></p>
   <p>---------------------------------------------------------------</p>
+  <p><a href="php/">php/</font></a><br></p>
+  <p><a href="Қарға/"><font color='black'>Қарға/</font></a><br></p>
+  <p>---------------------------------------------------------------</p>
   <h4>Perl</h4>
   <form action="/cgi-bin/perl/env.pl" method="get" target="_blank">
     <input type="hidden" name="par1" value="aaa">
@@ -87,17 +90,21 @@
   <p>---------------------------------------------------------------</p>
   <h4>FastCGI</h4>
   <form action="/env" method="get" target="_blank">
-    <input type="hidden" name="name" value="123">
+    <input type="hidden" name="name" value="qwerty">
     <input type="submit" value="fastcgi/env(get)">
   </form>
   <form action="/env" method="post" target="_blank">
-    <input type="hidden" name="name" value="123">
+    <input type="hidden" name="name" value="qwerty">
     <input type="submit" value="fastcgi/env(post)">
   </form>
   <br>
-  <form action="/test2" method="get" target="_blank">
-    <input type="hidden" name="name" value="123">
-    <input type="submit" value="fastcgi/test2(get)">
+  <form action="/test" method="get" target="_blank">
+    <input type="hidden" name="name" value="qwerty">
+    <input type="submit" value="fastcgi/test(get)">
+  </form>
+  <form action="/test" method="post" target="_blank">
+    <input type="hidden" name="name" value="qwerty">
+    <input type="submit" value="fastcgi/test(post)">
   </form>
   <hr>
   <p id="time"></p>
