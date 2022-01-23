@@ -8,7 +8,7 @@ pthread_mutex_t mtx_chld = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t  cond_close_cgi = PTHREAD_COND_INITIALIZER;
 
 static int num_chlds = 0;
-/*====================================================================*/
+//======================================================================
 int timedwait_close_cgi(void)
 {
     int ret = 0;
@@ -43,7 +43,7 @@ pthread_mutex_lock(&mtx_chld);
 pthread_mutex_unlock(&mtx_chld);
     return ret;
 }
-/*====================================================================*/
+//======================================================================
 void cgi_dec()
 {
 pthread_mutex_lock(&mtx_chld);
@@ -52,7 +52,7 @@ pthread_mutex_unlock(&mtx_chld);
     pthread_cond_signal(&cond_close_cgi);
 //  pthread_cond_broadcast(&cond_close_cgi);
 }
-/*====================================================================*/
+//======================================================================
 const char *cgi_script_file(const char *name)
 {
     char *p;
@@ -63,7 +63,7 @@ const char *cgi_script_file(const char *name)
     }
     return name;
 }
-/*====================================================================*/
+//======================================================================
 int wait_pid(Connect *req, int pid)
 {
     int n, status, ret = 0;
@@ -89,7 +89,7 @@ int wait_pid(Connect *req, int pid)
 
     return ret;
 }
-/*====================================================================*/
+//======================================================================
 int kill_script(Connect *req, int pid, int stat, const char *msg)
 {
     int n, status;
@@ -123,7 +123,7 @@ int cgi_chunk(Connect *req, String *hdrs, int cgi_serv_in, char *start_ptr, int 
         chunk = ((req->httpProt == HTTP11) && req->connKeepAlive) ? SEND_CHUNK : SEND_NO_CHUNK;
  
     chunked chk = {MAX_LEN_SIZE_CHUNK, chunk, 0, req->clientSocket, 0};
-//print_err("<%s:%d> ---------------\n", __func__, __LINE__);
+
     req->numPart = 0;
     req->respContentType = NULL;
     req->respContentLength = -1;
@@ -182,7 +182,7 @@ int cgi_chunk(Connect *req, String *hdrs, int cgi_serv_in, char *start_ptr, int 
         print_err("<%s:%d> Error chunk_end()\n", __func__, __LINE__);
         return -1;
     }
-    //----------------------- end response -----------------------------
+    
     return 0;
 }
 //======================================================================
@@ -191,7 +191,7 @@ int cgi_read_headers(Connect *req, String *hdrs, int cgi_serv_in)
     int ReadFromScript;
     const int size = 256;
     char buf[size];
-//print_err("<%s:%d> ---------------\n", __func__, __LINE__);
+
     req->respStatus = RS200;
     ReadFromScript = read_timeout(cgi_serv_in, buf, size, conf->TimeoutCGI);
     if(ReadFromScript <= 0)
@@ -230,7 +230,7 @@ int cgi_read_headers(Connect *req, String *hdrs, int cgi_serv_in)
 
         if (len == 0)
             break;
-//print_err(">%s<\n", s);
+        
         if (!(p = memchr(str, ':', len)))
         {
             print__err(req, "<%s:%d> Error: Line not header [%s]\n", __func__, __LINE__, str);
@@ -311,7 +311,7 @@ int cgi_fork(Connect *req)
         close(cgi_serv[1]);
         return -1;
     }
-    /*--------------------------- fork -------------------------------*/
+    //--------------------------- fork ---------------------------------
     pid_t pid = fork();
     if(pid < 0)
     {
@@ -326,7 +326,7 @@ int cgi_fork(Connect *req)
     else if(pid == 0)
     {
         char s[64];
-        /*----------------------- child ------------------------------*/
+        //----------------------- child --------------------------------
         close(cgi_serv[0]);
         close(serv_cgi[1]);
         
@@ -353,7 +353,6 @@ int cgi_fork(Connect *req)
         setenv("GATEWAY_INTERFACE", "CGI/1.1", 1);
         setenv("DOCUMENT_ROOT", conf->rootDir, 1);
         setenv("REMOTE_ADDR", req->remoteAddr, 1);
-//      setenv("REMOTE_HOST", req->remote_addr, 1);
         setenv("REQUEST_URI", req->uri, 1);
         setenv("REQUEST_METHOD", get_str_method(req->reqMethod), 1);
         setenv("SERVER_PROTOCOL", get_str_http_prot(req->httpProt), 1);
@@ -410,7 +409,7 @@ int cgi_fork(Connect *req)
     //=========================== parent ===============================
         close(serv_cgi[0]);
         close(cgi_serv[1]);
-        /*------------ write to script ----------*/
+        //------------ write to script ------------
         if(req->reqMethod == M_POST)
         {
             if (req->tail)
@@ -433,7 +432,7 @@ int cgi_fork(Connect *req)
                     client_to_cosmos(req->clientSocket, (long)req->reqContentLength);
 
                 print__err(req, "<%s:%d> Error client_to_script() = %d\n", __func__, __LINE__, wr_bytes);
-                close(cgi_serv[0]);   //  ?
+                close(cgi_serv[0]);
                 close(serv_cgi[1]);
                 return kill_script(req, pid, RS500, "2");
             }
@@ -493,8 +492,8 @@ int cgi(Connect *req)
     {
         return -1;
     }
-    /*----------------------------------------------------------------*/
-    ret = cgi_fork(req); //, cgi_serv[0], cgi_serv[1], serv_cgi[0], serv_cgi[1]);
+    //------------------------------------------------------------------
+    ret = cgi_fork(req);
     cgi_dec();
     if (ret < 0)
         req->connKeepAlive = 0;

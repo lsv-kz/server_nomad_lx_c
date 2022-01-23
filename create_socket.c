@@ -68,7 +68,7 @@ int create_server_socket(const struct Config *conf)
 //======================================================================
 int create_client_socket(const char *host)
 {
-    int sockfd, n;//, sock_opt = 1;
+    int sockfd, n;
     char addr[256];
     char port[16];
     
@@ -76,7 +76,7 @@ int create_client_socket(const char *host)
     n = sscanf(host, "%[^:]:%s", addr, port);
     if(n == 2) //==== AF_INET ====
     {
-        int sock_opt = 1;
+        const int sock_opt = 1;
         struct sockaddr_in sock_addr;
         
         memset(&sock_addr, 0, sizeof(sock_addr));

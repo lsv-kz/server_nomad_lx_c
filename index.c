@@ -1,6 +1,6 @@
 #include "server.h"
 
-/*====================================================================*/
+//======================================================================
 int isimage(char *name)
 {
     char *p;
@@ -16,7 +16,7 @@ int isimage(char *name)
     else if (!strlcmp_case(p, ".jpeg", 5) || !strlcmp_case(p, ".jpg", 4)) return 1;
     return 0;
 }
-/*====================================================================*/
+//======================================================================
 int isaudiofile(char *name)
 {
     char *p;
@@ -28,7 +28,7 @@ int isaudiofile(char *name)
     else if (!strlcmp_case(p, ".ogg", 4)) return 1;
     return 0;
 }
-/*====================================================================*/
+//======================================================================
 int cmp(const void *a, const void *b)
 {
     unsigned int n1, n2;
@@ -49,7 +49,7 @@ int cmp(const void *a, const void *b)
 
     return i;
 }
-/*====================================================================*/
+//======================================================================
 int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
 {
     const int len_path = str_len(req->path);
@@ -61,7 +61,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
         chunk = ((req->httpProt == HTTP11) && req->connKeepAlive) ? SEND_CHUNK : SEND_NO_CHUNK;
     
     chunked chk = {MAX_LEN_SIZE_CHUNK, chunk, 0, req->clientSocket};
-//print_err("<%s:%d> ---------------\n", __func__, __LINE__);
+
     req->respStatus = RS200;
     req->numPart = 0;
     
@@ -107,6 +107,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
         "</h3>\n"
         "  <table cols=\"2\" width=\"100\%\">\n"
         "   <tr><td><h3>Directories</h3></td><td></td></tr>\n");
+    
     if (chk.err)
     {
         print_err("<%s:%d> Error va_chunk_add_str()\n", __func__, __LINE__);
@@ -122,7 +123,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
         print_err("<%s:%d> Error va_chunk_add_str()\n", __func__, __LINE__);
         return -1;
     }
-    /*-------------------------- Directories -------------------------*/
+    //-------------------------- Directories ---------------------------
     for (int i = 0; (i < numFiles); i++)
     {
         char buf[1024];
@@ -238,7 +239,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
             }
         }
     }
-    /*----------------------------------------------------------------*/
+    //------------------------------------------------------------------
     va_chunk_add_str(&chk, 3, 
             "  </table>\n"
             "  <hr>\n  ", 
@@ -283,7 +284,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
 
     return 0;
 }
-/*====================================================================*/
+//======================================================================
 int read_dir(Connect *req)
 {
     DIR *dir;
@@ -291,7 +292,7 @@ int read_dir(Connect *req)
     int maxNumFiles = 1024, numFiles = 0;
     char *list[maxNumFiles];
     int ret;
-//print__err(req, "<%s:%d> -----------------------------------\n", __func__, __LINE__);
+
     dir = opendir(Str(req->path));
     if (dir == NULL)
     {  

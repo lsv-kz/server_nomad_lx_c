@@ -1,7 +1,7 @@
 #include "server.h"
 #include <stdarg.h>
 
-/*============================= get_time =============================*/
+//======================================================================
 int get_time(char *s, int size_buf)
 {
     time_t now = 0;
@@ -24,7 +24,7 @@ int get_time(char *s, int size_buf)
     strftime(s, size_buf, "%a, %d %b %Y %H:%M:%S GMT", &t);//%z  %Z
     return 0;
 }
-/*====================================================================*/
+//======================================================================
 char *strstr_case(const char *str1, const char *str2)
 {
     char c1, c2, *s1, *s2, *p1, *p2;
@@ -69,7 +69,7 @@ char *strstr_case(const char *str1, const char *str2)
 
     return NULL;
 }
-/*====================================================================*/
+//======================================================================
 int strlcmp_case(const char *s1, const char *s2, int len)
 {
     char c1, c2;
@@ -94,7 +94,7 @@ int strlcmp_case(const char *s1, const char *s2, int len)
 
     return 0;
 }
-/*====================================================================*/
+//======================================================================
 int get_int_method(char *s)
 {
     if (!memcmp(s, (char*)"GET", 3))
@@ -110,7 +110,7 @@ int get_int_method(char *s)
     else
         return 0;
 }
-/*====================================================================*/
+//======================================================================
 const char *get_str_method(int i)
 {
     if (i == M_GET)
@@ -125,7 +125,7 @@ const char *get_str_method(int i)
         return (char*)"CONNECT";
     return (char*)"";
 }
-/*====================================================================*/
+//======================================================================
 int get_int_http_prot(char *s)
 {
     if (!memcmp(s, (char*)"HTTP/1.1", 8))
@@ -139,7 +139,7 @@ int get_int_http_prot(char *s)
     else
         return 0;
 }
-/*====================================================================*/
+//======================================================================
 const char *get_str_http_prot(int i)
 {
 
@@ -153,7 +153,7 @@ const char *get_str_http_prot(int i)
             return (char*)"HTTP/2";
     return (char*)"";
 }
-/*====================================================================*/
+//======================================================================
 char *strstr_lowercase(char * s1, char *s2)
 {
     int i, len = strlen(s2);
@@ -173,7 +173,7 @@ char *strstr_lowercase(char * s1, char *s2)
     }
     return NULL;
 }
-/*=========================== str_num ================================*/
+//======================================================================
 int str_num(const char *s)
 {
     unsigned int len = strlen(s), i = 0;
@@ -201,7 +201,7 @@ int str_num(const char *s)
     sscanf(s, "%u", &i);
     return i;
 }
-/*====================================================================*/
+//======================================================================
 char *istextfile(const char *path)
 {
     FILE *f;
@@ -341,7 +341,7 @@ char *istextfile(const char *path)
 end:
     return "text/plain; charset=cp1251";
 }
-/*====================================================================*/
+//======================================================================
 char *ismediafile(const char *path)
 {
     FILE *f;
@@ -400,7 +400,7 @@ char *ismediafile(const char *path)
                 return "audio/mpeg";
         }
     }
-//----------------------------------------------------------------------
+    
     if(!memcmp(s, "FLV", 3)) return "video/x-flv";            // flv
     if(!memcmp(s + 4, "ftyp3gp", 6)) return "video/3gpp"; // 3gp
     if(!memcmp(s + 4, "ftypqt", 6)) return "video/quicktime"; // mov
@@ -412,7 +412,7 @@ char *ismediafile(const char *path)
     if(!memcmp(s, "\x00\x00\x01\xBA", 4)) return "video/mpeg";
     return "";
 }
-/*=========================== file_extens ============================*/
+//======================================================================
 char *content_type(const char *s)
 {
     char *p;
@@ -476,7 +476,7 @@ end:
 
     return "";
 }
-/*====================================================================*/
+//======================================================================
 int clean_path(char *path)
 {
     int slash = 0, comma = 0, cnt = 0;
@@ -527,7 +527,7 @@ int clean_path(char *path)
     *p = 0;
     return cnt;
 }
-/*====================================================================*/
+//======================================================================
 const char *base_name(const char *path)
 {
     char *p;
@@ -615,7 +615,7 @@ int parse_startline_request(Connect *req, char *s, int len)
 
     return 0;
 }
-/*====================================================================*/
+//======================================================================
 int parse_headers(Connect *req, char *s, int len)
 {
     int n;
@@ -694,7 +694,7 @@ int parse_headers(Connect *req, char *s, int len)
 
     return 0;
 }
-/*====================================================================*/
+//======================================================================
 const char *str_err(int i)
 {
     switch(i)
@@ -814,25 +814,4 @@ const char *str_err(int i)
     }
     return "";
 }
-//======================================================================
-void hex_dump_stderr(const void *p, int n)
-{
-    int count, addr = 0, col;
-    const unsigned char *buf = (unsigned char *)p;
-    char str[18];
 
-    for(count = 0; count < n;)
-    {
-        fprintf(stderr, "%08X  ", addr);
-        for(col = 0, addr = addr + 0x10; (count < n) && (col < 16); count++, col++)
-        {
-            if (col == 8) fprintf(stderr, " ");
-            fprintf(stderr, "%02X ", *(buf+count));
-            str[col] = (*(buf + count) >= 32 && *(buf + count) < 127) ? *(buf + count) : '.';
-        }
-        str[col] = 0;
-        if (col <= 8) fprintf(stderr, " ");
-        fprintf(stderr, "%*s  %s\n", (16 - (col)) * 3, "", str);
-    }
-    fprintf(stderr, "\n");
-}

@@ -194,7 +194,6 @@ pthread_mutex_unlock(&mtx_);
         }
         else if (ret == 0)
         {
-            //print_err("[%d]<%s:%d> count_resp=%d\n", num_chld, __func__, __LINE__, count_resp);
             continue;
         }
         
@@ -257,7 +256,7 @@ pthread_mutex_unlock(&mtx_);
             }
         }
     }
-//    print_err("[%d]<%s:%d> *** Exit send_files() ***\n", num_chld, __func__, __LINE__);
+    
     if (conf->SEND_FILE != 'y')
         free(rd_buf);
     free(fdwr);
@@ -348,7 +347,7 @@ void init_struct_request(Connect *req)
     req->iIf_Range = -1;
 
     req->countReqHeaders = 0;
-    /*------------------------------*/
+    //--------------------------------
     req->scriptType = 0;
     req->reqContentLength = -1LL;
     req->fileSize = -1LL;
@@ -359,7 +358,7 @@ void init_struct_request(Connect *req)
     req->respContentType = NULL;
     
     req->countRespHeaders = 0;
-    /*----------------------------*/
+    //------------------------------
     req->send_bytes = 0LL;
 
     req->numPart = 0;

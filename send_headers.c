@@ -9,7 +9,7 @@ void response_status(String *s, const char *prot, const char *stat)
     str_cat(s, " ");
     str_cat_ln(s, stat);
 }
-/*====================================================================*/
+//======================================================================
 void create_response_headers(Connect *req, String *hd, String *hdrs)
 {
     char time_resp[64];
@@ -70,7 +70,7 @@ void create_response_headers(Connect *req, String *hd, String *hdrs)
         else
             str_cat(hd, "Connection: keep-alive\r\n");
     }
-    /*----------------------------------------------------------------*/
+    //------------------------------------------------------------------
     if (hdrs)
     {
         str_cat(hd, Str(hdrs));
@@ -95,7 +95,7 @@ void create_response_headers(Connect *req, String *hd, String *hdrs)
         return;
     }
 }
-//----------------------------------------------------------------------
+//======================================================================
 int send_response_headers(Connect *req, String *hdrs)
 {
     if(req->httpProt == HTTP09)
@@ -117,7 +117,7 @@ int send_response_headers(Connect *req, String *hdrs)
     
     return 0;
 }
-/*========================== create_html =============================*/
+//======================================================================
 void create_html(Connect *req, String *s, const char *msg)
 {
     const char *title = status_resp(req->respStatus);
@@ -144,7 +144,7 @@ void create_html(Connect *req, String *s, const char *msg)
                 " </body>\n"
                 "</html>");
 }
-/*====================================================================*/
+//======================================================================
 void send_message(Connect *req, String *hdrs, const char *msg)
 {
     if(!msg)

@@ -51,7 +51,6 @@ int read_timeout(int fd, char *buf, int len, int timeout)
         }
         else if (fdrd.revents & POLLHUP)
         {
-//          print_err("<%s:%d>***** POLLHUP *****0x%02x\n", __func__, __LINE__, fdrd.revents);
             break;
         }
         else if (fdrd.revents & POLLERR)
@@ -63,7 +62,7 @@ int read_timeout(int fd, char *buf, int len, int timeout)
     
     return read_bytes;
 }
-/*====================================================================*/
+//======================================================================
 int write_timeout(int fd, const char *buf, int len, int timeout)
 {
     int write_bytes = 0, ret;
@@ -138,7 +137,7 @@ int client_to_script(int fd_in, int fd_out, long long *cont_len, int num_thr)
 
     return wr_bytes;
 }
-/*====================================================================*/
+//======================================================================
 long client_to_cosmos(int fd_in, long size)
 {
     long wr_bytes = 0;
@@ -164,7 +163,7 @@ long client_to_cosmos(int fd_in, long size)
 
     return wr_bytes;
 }
-/*====================================================================*/
+//======================================================================
 long cgi_to_cosmos(int fd_in, int timeout)
 {
     long wr_bytes = 0;
@@ -187,7 +186,7 @@ long cgi_to_cosmos(int fd_in, int timeout)
 
     return wr_bytes;
 }
-/*====================================================================*/
+//======================================================================
 long fcgi_to_cosmos(int fd_in, int size, int timeout)
 {
     long wr_bytes = 0;
@@ -260,10 +259,11 @@ int fcgi_read_stderr(int fd_in, int cont_len, int timeout)
         write(STDERR_FILENO, buf, rd);
         wr_bytes += rd;
     }
-write(STDERR_FILENO, "\n", 1);
+    
+    write(STDERR_FILENO, "\n", 1);
     return wr_bytes;
 }
-/*====================================================================*/
+//======================================================================
 int send_file_ux(int fd_out, int fd_in, char *buf, int *size, off_t offset, long long *cont_len)
 {
     int rd, wr, ret = 0;

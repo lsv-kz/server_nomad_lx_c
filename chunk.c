@@ -25,7 +25,6 @@ static int send_chunk(chunked *chk, int size)
     }
     
     int ret = write_timeout(chk->sock, p, len, conf->TimeOut);
-//hex_dump_stderr(p, len);
     chk->i = MAX_LEN_SIZE_CHUNK;
     if (ret < 0)
     {
@@ -179,7 +178,6 @@ int cgi_to_client(chunked *chk, int fdPipe)
         }
         else if (ret != rd)
         {
-    //      print_err("<%s:%d> ret(%d) != rd(%d)\n", __func__, __LINE__, ret, rd);
             chk->i += ret;
             break;
         }

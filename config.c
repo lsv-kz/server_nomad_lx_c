@@ -33,7 +33,7 @@ int check_path(char *path, int size)
 
     return 0;
 }
-/*====================================================================*/
+//======================================================================
 int create_conf_file()
 {
     FILE *f;
@@ -340,7 +340,7 @@ int read_conf_file(const char *path_conf)
     {
         printf("   [%s] : [%s]\n", i->scrpt_name, i->addr);
     }
-//-------------------------log_dir--------------------------------------
+    //-------------------------log_dir----------------------------------
     if (check_path(c.logDir, sizeof(c.logDir)) == -1)
     {
         fprintf(stderr, "!!! Error logDir [%s]\n", c.logDir);
@@ -349,14 +349,14 @@ int read_conf_file(const char *path_conf)
     }
     
     create_logfiles(conf->logDir, conf->ServerSoftware);
-//-------------------------root_dir-------------------------------------
+    //-------------------------root_dir---------------------------------
     if (check_path(c.rootDir, sizeof(c.rootDir)) == -1)
     {
         fprintf(stderr, "!!! Error rootDir [%s]\n", c.rootDir);
         getchar();
         exit(1);
     }
-//-------------------------cgi_dir--------------------------------------
+    //-------------------------cgi_dir----------------------------------
     if (check_path(c.cgiDir, sizeof(c.cgiDir)) == -1)
     {
         c.cgiDir[0] = '\0';
@@ -399,7 +399,7 @@ int read_conf_file(const char *path_conf)
             }
         }
     }
-    //----------------------------------------------------------------------
+    //------------------------------------------------------------------
     uid_t uid = getuid();
     if (uid == 0)
     {

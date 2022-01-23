@@ -25,8 +25,7 @@ void response1(int num_chld)
             free(req);
             return;
         }
-        /*--------------------- read_request ---------------------*/
-        //get_time(req->sLogTime, sizeof(req->sLogTime));
+        //--------------------------------------------------------------
         int ret = parse_startline_request(req, req->arrHdrs[0].ptr, req->arrHdrs[0].len);
         if (ret)
         {
@@ -101,7 +100,7 @@ void response1(int num_chld)
             req->err = -RS505;
             goto end;
         }
-    /*------------------------ requests ------------------------------*/    
+        //--------------------------------------------------------------
         if ((req->reqMethod == M_GET) || (req->reqMethod == M_HEAD) || (req->reqMethod == M_POST))
         {
             lenRootDir = strlen(conf->rootDir);
@@ -174,7 +173,7 @@ void response1(int num_chld)
         }
     }
 }
-/*====================================================================*/
+//======================================================================
 void *thread_client(void *arg)
 {
     int num_chld = *((int*)arg);
@@ -187,7 +186,7 @@ int read_dir(Connect *req);
 int get_ranges(Connect *req);
 int create_multipart_head(Connect *req, struct Range *ranges, char *buf, int len_buf);
 const char boundary[] = "---------a9b5r7a4c0a2d5a1b8r3a";
-/*============================ file_size =============================*/
+//======================================================================
 long long file_size(const char *s)
 {
     struct stat st;
@@ -291,11 +290,9 @@ int response2(Connect *req)
         req->scriptName = NULL;
         return ret;
     }
-    /*------------------------- dir or file --------------------------*/
-//    hex_dump_stderr(Str(req->path), str_len(req->path));
+    //------------------------------------------------------------------
     if (lstat(Str(req->path), &st) == -1)
     {
-  //      print_err("<%s:%d> Error lstat(\"%s\"): %s\n", __func__, __LINE__, Str(req->path), str_err(errno));
         if(errno == EACCES)
             return -RS403;
         return fastcgi(req, req->decodeUri);
@@ -308,7 +305,7 @@ int response2(Connect *req)
             return -RS403;
         }
     }
-    /*------------------------ list dir  -----------------------------*/
+    //------------------------------------------------------------------
     if(S_ISDIR(st.st_mode))
     {
         if(req->uri[req->uriLen - 1] != '/')
@@ -408,14 +405,13 @@ int response2(Connect *req)
                 req->scriptName = "/index.fcgi";
                 ret = fcgi(req);
                 req->scriptName = NULL;
-           //     if (ret == 0)
-                    return ret;
+                return ret;
             }
 
             return read_dir(req);
         }
     }
-    /*----------------------- send file ------------------------------*/
+    //----------------------- send file --------------------------------
     req->fileSize = file_size(Str(req->path));
     req->numPart = 0;
     req->respContentType = content_type(Str(req->path));
@@ -446,7 +442,7 @@ int response2(Connect *req)
         req->offset = 0;
         req->respContentLength = req->fileSize;
     }
-    /*------------------------- open file ----------------------------*/
+    
     req->fd = open(Str(req->path), O_RDONLY);
     if (req->fd == -1)
     {
@@ -500,13 +496,13 @@ int response2(Connect *req)
     push_pollout_list(req);
     return 1;
 }
-/*====================================================================*/
+//======================================================================
 int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
 {
     int n;
     long long send_all_bytes, len;
     char buf[1024];
-    /*------------------------- send file ----------------------------*/
+    
     long long all_bytes = 0;
     int i;
     struct Range *range;
@@ -579,7 +575,7 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
 
     return 0;
 }
-/*====================================================================*/
+//======================================================================
 int create_multipart_head(Connect *req, struct Range *ranges, char *buf, int len_buf)
 {
     int n, all = 0;

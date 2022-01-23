@@ -2,7 +2,7 @@
 
 int flog, flog_err;
 pthread_mutex_t mtx_log = PTHREAD_MUTEX_INITIALIZER;
-/*====================================================================*/
+//======================================================================
 void create_logfiles(const char *log_dir, const char * ServerSoftware)
 {
     char buf[256];
@@ -55,17 +55,17 @@ void create_logfiles(const char *log_dir, const char * ServerSoftware)
     
     dup2(flog_err, STDERR_FILENO);
 }
-/*====================================================================*/
+//======================================================================
 void close_logs(void)
 {
     close(flog);
     close(flog_err);
 }
-/*====================================================================*/
+//======================================================================
 void print_err(const char *format, ...)
 {
     va_list ap;
-    char buf[256]; // LINE_MAX
+    char buf[256];
 
     buf[0] = '[';
     get_time(buf + 1, sizeof(buf) - 1);
@@ -96,7 +96,7 @@ pthread_mutex_lock(&mtx_log);
     write(flog_err, buf, strlen(buf));
 pthread_mutex_unlock(&mtx_log);
 }
-/*====================================================================*/
+//======================================================================
 void print_log(Connect *req)
 {
     const int size = 320;
@@ -129,56 +129,5 @@ void print_log(Connect *req)
         buf[size - 2] = '\n';
 pthread_mutex_lock(&mtx_log);
     write(flog, buf, strlen(buf));
-pthread_mutex_unlock(&mtx_log);
-}
-//======================================================================
-void print_log2(Connect *req)
-{
-    const int size = 320;
-    String buf_ = str_init(size), *buf;
-    if (buf_.err)
-    {
-        printf("<%s:%d> Error: malloc()\n", __func__, __LINE__);
-        return;
-    }
-    buf = &buf_;
-    str_llint(buf, req->numChld);
-    str_cat(buf, "/");
-    str_llint(buf, req->numConn);
-    str_cat(buf, "/");
-    str_llint(buf, req->numReq);
-    str_cat(buf, " - ");
-    str_cat(buf, req->remoteAddr);
-    str_cat(buf, " - [");
-    str_cat(buf, req->sLogTime);
-    str_cat(buf, "] - \"");
-    //----------------------------
-    if (req->reqMethod > 0)
-    {
-        str_cat(buf, get_str_method(req->reqMethod));
-        str_cat(buf, " ");
-        str_cat(buf, req->decodeUri);
-        str_cat(buf, " ");
-        str_cat(buf, get_str_http_prot(req->httpProt));
-        str_cat(buf, "\" ");
-    }
-    else
-    {
-        str_cat(buf, "-\" ");
-    }
-    //----------------------------
-    str_llint(buf, req->respStatus);
-    str_cat(buf, " ");
-    str_llint(buf, req->send_bytes);
-    str_cat(buf, " \"");
-    
-    str_cat(buf, (req->iReferer >= 0) ? req->reqHeadersValue[req->iReferer] : "-");
-    str_cat(buf, "\" \"");
-    str_cat(buf, (req->iUserAgent >= 0) ? req->reqHeadersValue[req->iUserAgent] : "-");
-    str_cat(buf, "\"\n");
-    
-pthread_mutex_lock(&mtx_log);
-    write(flog, Str(buf), str_len(buf));
-    str_free(buf);
 pthread_mutex_unlock(&mtx_log);
 }

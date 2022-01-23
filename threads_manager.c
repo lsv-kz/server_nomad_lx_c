@@ -134,8 +134,8 @@ pthread_mutex_lock(&mtx_thr);
         --count_thr;
         ret = EXIT_THR;
     }
-
 pthread_mutex_unlock(&mtx_thr);
+
     if (ret)
     {
         pthread_cond_broadcast(&cond_exit_thr);
@@ -249,7 +249,7 @@ void *thr_create_manager(void *par)
     return NULL;
 }
 //======================================================================
-int servSock, unSock;
+int servSock, uxSock;
 Connect *create_req(void);
 //======================================================================
 static void signal_handler(int sig)
@@ -259,7 +259,7 @@ static void signal_handler(int sig)
         //print_err("[%d] <%s:%d> ### SIGINT ###\n", nChld, __func__, __LINE__);
         shutdown(servSock, SHUT_RDWR);
         close(servSock);
-        close(unSock);
+        close(uxSock);
     }
     else if (sig == SIGSEGV)
     {
@@ -291,7 +291,7 @@ int manager(int sockServer, int numChld, int to_parent)
         exit(1);
     }
     
-    unSock = unixSock;
+    uxSock = unixSock;
 
     fd_close_conn = to_parent;
     nChld = numChld;
@@ -357,7 +357,7 @@ int manager(int sockServer, int numChld, int to_parent)
         int clientSocket = recv_fd(unixSock, numChld, &clientAddr, addrSize);
         if (clientSocket < 0)
         {
-            //print_err("[%d]<%s:%d> Error recv_fd()\n", numChld, __func__, __LINE__);
+            print_err("[%d]<%s:%d> Error recv_fd()\n", numChld, __func__, __LINE__);
             break;
         }
 

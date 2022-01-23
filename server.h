@@ -78,7 +78,7 @@ struct Range {
     long long stop;
     long long part_len;
 };
-//----------------------------------------------------------------------
+//======================================================================
 struct Config
 {
     char host[128];
@@ -197,13 +197,13 @@ typedef struct Connect{
     int       countReqHeaders;
     char      *reqHeadersName[MAX_HEADERS + 1];
     char      *reqHeadersValue[MAX_HEADERS + 1];
-    //---------------------- dynamic buffer ----------------------------
+    
     const char      *scriptName;
     String    *path;
     struct Range *rangeBytes;
-    //---------------------- end ---------------------------------------
+    
     int       sizePath;
-    //------------------------------------------------------------------
+    
     int       scriptType;
     int       respStatus;
     char      sLogTime[64];
@@ -211,7 +211,7 @@ typedef struct Connect{
     long long fileSize;
     const char  *respContentType;
     int       countRespHeaders;
-    //----------------------------
+    
     int       fd;
     off_t     offset;
     long long send_bytes;
@@ -231,7 +231,7 @@ typedef struct {
 } chunked;
 
 extern char **environ;
-
+//----------------------------------------------------------------------
 int response(Connect *req);
 int options(Connect *req);
 int cgi(Connect *req);

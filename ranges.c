@@ -1,7 +1,7 @@
 #include "server.h"
 
 enum {DIGIT = 1, DASH};
-/*====================================================================*/
+//======================================================================
 int check_ranges(Connect *req)
 {
     int size = req->numPart;
@@ -78,7 +78,7 @@ int check_ranges(Connect *req)
     req->numPart = numPart;
     return numPart;
 }
-/*====================================================================*/
+//======================================================================
 int parse_ranges(Connect *req)
 {
     if (!req->sRange) return -RS416;
@@ -231,7 +231,7 @@ int parse_ranges(Connect *req)
     }
     return req->numPart;
 }
-/*====================================================================*/
+//======================================================================
 int get_ranges(Connect *req)
 {
     int n = parse_ranges(req);
