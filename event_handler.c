@@ -171,16 +171,16 @@ void *event_handler(void *arg)
     while (1)
     {
 pthread_mutex_lock(&mtx_);
-            
-            while ((!list_start) && (!list_new_start) && (!close_thr))
-            {
-                pthread_cond_wait(&cond_, &mtx_);
-            }
-
-            if (close_thr)
-                break;
+        
+        while ((!list_start) && (!list_new_start) && (!close_thr))
+        {
+            pthread_cond_wait(&cond_, &mtx_);
+        }
+        
 pthread_mutex_unlock(&mtx_);
         
+        if (close_thr)
+            break;
 
         count_resp = set_list(fdwr);
         if (count_resp == 0)
@@ -225,7 +225,7 @@ pthread_mutex_unlock(&mtx_);
                 else if (wr == -EAGAIN)
                 {
                     r->sock_timer = 0;
-                    print__err(r, "<%s:%d> Error: EAGAIN\n", __func__, __LINE__);
+                    //print__err(r, "<%s:%d> Error: EAGAIN\n", __func__, __LINE__);
                 }
             }
             else if (fdwr[i].revents == POLLIN)

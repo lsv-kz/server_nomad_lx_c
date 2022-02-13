@@ -25,12 +25,10 @@ int get_time(char *s, int size_buf)
     return 0;
 }
 //======================================================================
-char *strstr_case(const char *str1, const char *str2)
+const char *strstr_case(const char *s1, const char *s2)
 {
-    char c1, c2, *s1, *s2, *p1, *p2;
-    
-    s1 = (char*)str1;
-    s2 = (char*)str2;
+    const char *p1, *p2;
+    char c1, c2;
     
     if (!s1 || !s2) return NULL;
     if (*s2 == 0) return s1;

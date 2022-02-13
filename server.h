@@ -268,7 +268,7 @@ int send_response_headers(Connect *req, String *hdrs);
 const char *status_resp(int st);
 //----------------------------------------------------------------------
 int get_time(char *s, int size_buf);
-char *strstr_case(const char * s1, const char *s2);
+const char *strstr_case(const char * s1, const char *s2);
 int strlcmp_case(const char *s1, const char *s2, int len);
 
 int get_int_method(char *s);
@@ -284,7 +284,6 @@ const char *base_name(const char *path);
 int parse_startline_request(Connect *req, char *s, int len);
 int parse_headers(Connect *req, char *s, int len);
 const char *str_err(int i);
-void hex_dump_stderr(const void *p, int n);
 //----------------------------------------------------------------------
 void close_logs(void);
 void print(const char *format, ...);

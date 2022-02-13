@@ -16,10 +16,6 @@ static void signal_handler(int sig)
     if (sig == SIGINT)
     {
         print_err("<main> ######  SIGINT  ######\n");
-        /*for (int i = 0; i < conf->NumChld; ++i)
-        {
-            print_err("<main> numConn[%d]=%d\n", i, numConn[i]);
-        }*/
     }
     else if (sig == SIGSEGV)
     {
@@ -123,14 +119,8 @@ int main(int argc, char *argv[])
         fprintf(stderr, "   Error signal(SIGPIPE,)!\n");
         exit(EXIT_FAILURE);
     }
-
-    pid = getpid();
     //------------------------------------------------------------------
-    if ((conf->NumChld < 1) || (conf->NumChld > 8))
-    {
-        print_err("<%s:%d> Error NumChld = %d; [1 < NumChld <= 6]\n", __func__, __LINE__, conf->NumChld);
-        exit(1);
-    }
+    pid = getpid();
     
     sockServer = create_server_socket(conf);
     if(sockServer == -1)
@@ -142,12 +132,12 @@ int main(int argc, char *argv[])
 
     get_time(s, 64);
     printf(     " [%s] - server \"%s\" run\n"
-                "   ip = %s;\n"
-                "   port = %s;\n"
-                "   tcp_cork = %c;\n"
-                "   SndBufSize = %d;\n"
-                "   SendFile = %c;\n"
+                "   ip = %s\n"
+                "   port = %s\n"
+                "   tcp_cork = %c\n"
                 "   TcpNoDelay = %c\n\n"
+                "   SendFile = %c\n"
+                "   SndBufSize = %d\n"
                 "   NumChld = %d\n"
                 "   MaxThreads = %d\n"
                 "   MimThreads = %d\n\n"
@@ -164,10 +154,10 @@ int main(int argc, char *argv[])
                 "   Chunked = %c\n"
                 "   ClientMaxBodySize = %ld\n"
                 "  ------------- pid = %d -----------\n",
-                s, conf->ServerSoftware, conf->host, conf->servPort, conf->tcp_cork, conf->SNDBUF_SIZE, conf->SEND_FILE, conf->TcpNoDelay, conf->NumChld,
-                conf->MaxThreads, conf->MinThreads, conf->MaxChldsCgi, conf->ListenBacklog, conf->MAX_REQUESTS,
-                conf->KeepAlive, conf->TimeoutKeepAlive, conf->TimeOut, conf->TimeoutCGI, 
-                conf->UsePHP, conf->PathPHP, 
+                s, conf->ServerSoftware, conf->host, conf->servPort, conf->tcp_cork, conf->TcpNoDelay, 
+                conf->SEND_FILE, conf->SNDBUF_SIZE, conf->NumChld, conf->MaxThreads, conf->MinThreads,
+                conf->MaxChldsCgi, conf->ListenBacklog, conf->MAX_REQUESTS, conf->KeepAlive,
+                conf->TimeoutKeepAlive, conf->TimeOut, conf->TimeoutCGI, conf->UsePHP, conf->PathPHP,
                 conf->ShowMediaFiles, conf->Chunked, conf->ClientMaxBodySize, pid);
     printf("   %s;\n   %s\n\n", conf->rootDir, conf->cgiDir);
     fprintf(stderr, "  uid=%u; gid=%u\n", getuid(), getgid());
@@ -180,17 +170,6 @@ int main(int argc, char *argv[])
             *(p - 1) = 0;
             unsetenv(buf);
         }
-    }
-/*
-    for (int n = 0; environ[n]; ++n)
-    {
-        printf(" %s\n", environ[n]);
-    }
-*/
-    if(conf->MinThreads > conf->MaxThreads)
-    {
-        fprintf(stderr, "<%s():%d> Error: NumThreads > MaxThreads\n", __func__, __LINE__);
-        exit(1);
     }
     
     create_proc(conf->NumChld);
@@ -317,7 +296,6 @@ int main(int argc, char *argv[])
     while ((pid = wait(NULL)) != -1)
     {
         print_err("<> wait() pid: %d\n", pid);
-        continue;
     }
     
     free_fcgi_list();
@@ -356,11 +334,6 @@ pid_t create_child(int num_chld, int *from_chld)
                 printf("<%s> Error setuid(%d): %s\n", __func__, conf->server_uid, strerror(errno));
                 exit(1);
             }
-        }
-
-        for (int i = 0; i < num_chld; ++i)
-        {
-            close(unixFD[i]);
         }
         
         close(from_chld[0]);
