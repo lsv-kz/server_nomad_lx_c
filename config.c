@@ -42,7 +42,6 @@ int create_conf_file()
     if (!f)
     {
         perror("   Error create conf file");
-        getchar();
         exit(1);
     }
 
@@ -142,7 +141,6 @@ int read_conf_file(const char *path_conf)
         }
         
         fprintf(stderr, " Correct config file\n");
-        getchar();
         exit(1);
     }
 
@@ -335,21 +333,6 @@ int read_conf_file(const char *path_conf)
     
     fclose(f);
     
-    if ((c.NumChld < 1) || (c.NumChld > 8))
-    {
-        print_err("<%s:%d> Error NumChld = %d; [1 < NumChld <= 6]\n", __func__, __LINE__, c.NumChld);
-        exit(1);
-    }
-    
-    if(c.MinThreads > c.MaxThreads)
-    {
-        fprintf(stderr, "<%s():%d> Error: NumThreads > MaxThreads\n", __func__, __LINE__);
-        exit(1);
-    }
-    
-    if (c.MinThreads < 1)
-        c.MinThreads = 1;
-    
     fcgi_list_addr *i = c.fcgi_list;
     for (; i; i = i->next)
     {
@@ -359,16 +342,29 @@ int read_conf_file(const char *path_conf)
     if (check_path(c.logDir, sizeof(c.logDir)) == -1)
     {
         fprintf(stderr, "!!! Error logDir [%s]\n", c.logDir);
-        getchar();
         exit(1);
     }
     
     create_logfiles(c.logDir, c.ServerSoftware);
+    //------------------------------------------------------------------
+    if ((c.NumChld < 1) || (c.NumChld > 8))
+    {
+        print_err("<%s:%d> Error NumChld = %d; [1 < NumChld <= 6]\n", __func__, __LINE__, c.NumChld);
+        exit(1);
+    }
+    
+    if (c.MinThreads > c.MaxThreads)
+    {
+        fprintf(stderr, "<%s:%d> Error: NumThreads > MaxThreads\n", __func__, __LINE__);
+        exit(1);
+    }
+    
+    if (c.MinThreads < 1)
+        c.MinThreads = 1;
     //-------------------------root_dir---------------------------------
     if (check_path(c.rootDir, sizeof(c.rootDir)) == -1)
     {
         fprintf(stderr, "!!! Error rootDir [%s]\n", c.rootDir);
-        getchar();
         exit(1);
     }
     //-------------------------cgi_dir----------------------------------
@@ -376,7 +372,6 @@ int read_conf_file(const char *path_conf)
     {
         c.cgiDir[0] = '\0';
         fprintf(stderr, "!!! Error cgi_dir [%s]\n", c.cgiDir);
-        exit(1);
     }
     
     struct rlimit lim;
@@ -418,85 +413,54 @@ int read_conf_file(const char *path_conf)
     {
         char *p;
         c.server_uid = strtol(c.user, &p, 0);
-        if (strlen(c.user) && *p != '\0')
+        if (*p == '\0')
         {
-            struct passwd *passwdbuf = getpwnam(c.user);
-            if (!passwdbuf)
+            struct passwd *passwdbuf = getpwuid(c.server_uid);
+            if (passwdbuf == NULL)
             {
-                fprintf(stderr, "<%s:%d> Error getpwnam(): %s\n", __func__, __LINE__, c.user);
-                fprintf(stdout, "<%s:%d> Error getpwnam(): %s\n", __func__, __LINE__, c.user);
-                getchar();
+                fprintf(stderr, "<%s:%d> Error getpwuid(): %u\n", __func__, __LINE__, c.server_uid);
                 exit(1);
             }
             c.server_uid = passwdbuf->pw_uid;
         }
         else
         {
-            struct passwd *passwdbuf;
-            passwdbuf = getpwuid(c.server_uid);
-            if (passwdbuf == NULL)
+            struct passwd *passwdbuf = getpwnam(c.user);
+            if (!passwdbuf)
             {
-                fprintf(stderr, "<%s:%d> Error getpwuid(): %u\n", __func__, __LINE__, c.server_uid);
-                fprintf(stdout, "<%s:%d> Error getpwuid(): %u\n", __func__, __LINE__, c.server_uid);
-                getchar();
+                fprintf(stderr, "<%s:%d> Error getpwnam(): %s\n", __func__, __LINE__, c.user);
                 exit(1);
             }
+            c.server_uid = passwdbuf->pw_uid;
         }
         
         c.server_gid = strtol(c.group, &p, 0);
-        if (strlen(c.group) && *p != '\0')
+        if (*p == '\0')
         {
-            struct group *groupbuf = getgrnam(c.group);
-            if (!groupbuf)
+            struct group *groupbuf = getgrgid(c.server_gid);
+            if (groupbuf == NULL)
             {
-                fprintf(stderr, "<%s:%d> Error getgrnam(): %s\n", __func__, __LINE__, c.group);
-                fprintf(stdout, "<%s:%d> Error getgrnam(): %s\n", __func__, __LINE__, c.group);
-                getchar();
+                fprintf(stderr, "<%s:%d> Error getgrgid(): %u\n", __func__, __LINE__, c.server_gid);
                 exit(1);
             }
             c.server_gid = groupbuf->gr_gid;
         }
         else
         {
-            struct group *groupbuf;
-            groupbuf = getgrgid(c.server_gid);
-            if (groupbuf == NULL)
+            struct group *groupbuf = getgrnam(c.group);
+            if (!groupbuf)
             {
-                fprintf(stderr, "<%s:%d> Error getgrgid(): %u\n", __func__, __LINE__, c.server_gid);
-                fprintf(stdout, "<%s:%d> Error getgrgid(): %u\n", __func__, __LINE__, c.server_gid);
-                getchar();
+                fprintf(stderr, "<%s:%d> Error getgrnam(): %s\n", __func__, __LINE__, c.group);
                 exit(1);
             }
+            c.server_gid = groupbuf->gr_gid;
         }
         //--------------------------------------------------------------
-        if (c.server_uid >= c.server_gid)
-        {
-            if (setgid(c.server_uid) == -1)
-            {
-                fprintf(stderr, "<%s:%d> Error setgid(%u): %s\n", __func__, __LINE__, c.server_uid, strerror(errno));
-                fprintf(stdout, "<%s:%d> Error setgid(%u): %s\n", __func__, __LINE__, c.server_uid, strerror(errno));
-                getchar();
-                exit(1);
-            }
-        }
-        else
-        {
-            if (setgid(c.server_gid) == -1)
-            {
-                fprintf(stderr, "<%s:%d> Error setgid(%u): %s\n", __func__, __LINE__, c.server_gid, strerror(errno));
-                fprintf(stdout, "<%s:%d> Error setgid(%u): %s\n", __func__, __LINE__, c.server_gid, strerror(errno));
-                getchar();
-                exit(1);
-            }
-        }
-        
         if (c.server_uid != uid)
         {
             if (setuid(c.server_uid) == -1)
             {
                 fprintf(stderr, "<%s:%d> Error setuid(%u): %s\n", __func__, __LINE__, c.server_uid, strerror(errno));
-                fprintf(stdout, "<%s:%d> Error setuid(%u): %s\n", __func__, __LINE__, c.server_uid, strerror(errno));
-                getchar();
                 exit(1);
             }
         }

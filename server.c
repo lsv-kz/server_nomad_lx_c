@@ -126,7 +126,6 @@ int main(int argc, char *argv[])
     if(sockServer == -1)
     {
         fprintf(stderr, "<%d>   server: failed to bind\n", __LINE__);
-        getchar();
         exit(1);
     }
 
@@ -228,7 +227,7 @@ int main(int argc, char *argv[])
         
         if (fdrd[0].revents == POLLIN)
         {
-            unsigned char s[32];
+            unsigned char s[8];
             ret = read(from_chld[0], s, sizeof(s));
             if (ret <= 0)
             {
@@ -323,15 +322,13 @@ pid_t create_child(int num_chld, int *from_chld)
         {
             if (setgid(conf->server_gid) == -1)
             {
-                perror("setgid");
-                printf("<%s> Error setgid(%d): %s\n", __func__, conf->server_gid, strerror(errno));
+                fprintf(stderr, "<%s> Error setgid(%d): %s\n", __func__, conf->server_gid, strerror(errno));
                 exit(1);
             }
             
             if (setuid(conf->server_gid) == -1)
             {
-                perror("setuid");
-                printf("<%s> Error setuid(%d): %s\n", __func__, conf->server_uid, strerror(errno));
+                fprintf(stderr, "<%s> Error setuid(%d): %s\n", __func__, conf->server_uid, strerror(errno));
                 exit(1);
             }
         }
