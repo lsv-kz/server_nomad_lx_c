@@ -90,19 +90,19 @@ int main(int argc, char *argv[])
     else
     {
         int n = strlen(argv[1]);
-        if((sizeof(s) - 1) <= n)
+        if ((sizeof(s) - 1) <= n)
         {
             fprintf(stderr, "   Error: path of config file is large\n");
             exit(EXIT_FAILURE);
         }
         memcpy(s, argv[1], n);
         s[n] = 0;
-        if(s[n-1] != '/')
+        if (s[n-1] != '/')
         {
             s[n] = '/';
             s[++n] = 0;
         }
-        if((sizeof(s) - (n + 1)) <= strlen("server.conf"))
+        if ((sizeof(s) - (n + 1)) <= strlen("server.conf"))
         {
             fprintf(stderr, "..   Error: path of config file is large\n");
             exit(EXIT_FAILURE);
@@ -114,7 +114,7 @@ int main(int argc, char *argv[])
         read_conf_file(s);
     }
 
-    if(signal(SIGPIPE, SIG_IGN) == SIG_ERR)
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
     {
         fprintf(stderr, "   Error signal(SIGPIPE,)!\n");
         exit(EXIT_FAILURE);
@@ -123,7 +123,7 @@ int main(int argc, char *argv[])
     pid = getpid();
     
     sockServer = create_server_socket(conf);
-    if(sockServer == -1)
+    if (sockServer == -1)
     {
         fprintf(stderr, "<%d>   server: failed to bind\n", __LINE__);
         exit(1);
@@ -175,13 +175,13 @@ int main(int argc, char *argv[])
     
     printf("   pid main proc: %d\n", pid);
     
-    if(signal(SIGSEGV, signal_handler) == SIG_ERR)
+    if (signal(SIGSEGV, signal_handler) == SIG_ERR)
     {
         fprintf (stderr, "   Error signal(SIGSEGV,)!\n");
         exit (EXIT_FAILURE);
     }
     
-    if(signal(SIGINT, signal_handler) == SIG_ERR)
+    if (signal(SIGINT, signal_handler) == SIG_ERR)
     {
         fprintf (stderr, "   Error signal(SIGINT,)!\n");
         exit (EXIT_FAILURE);

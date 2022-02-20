@@ -321,7 +321,10 @@ int hd_read(Connect *req)
 
     n = empty_line(req);
     if (n == 1)
+    {
+        req->timeout = conf->TimeOut;
         return req->i_bufReq;
+    }
     else if (n < 0)
         return n;
         

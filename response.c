@@ -79,8 +79,6 @@ void response1(int num_chld)
                 req->uriLen = strlen(req->uri);
             }
         }
-        
-        req->timeout = conf->TimeoutKeepAlive;
 
         decode(req->uri, req->uriLen, req->decodeUri, sizeof(req->decodeUri) - 1);
         clean_path(req->decodeUri);
