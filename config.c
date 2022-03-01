@@ -421,7 +421,6 @@ int read_conf_file(const char *path_conf)
                 fprintf(stderr, "<%s:%d> Error getpwuid(): %u\n", __func__, __LINE__, c.server_uid);
                 exit(1);
             }
-            c.server_uid = passwdbuf->pw_uid;
         }
         else
         {
@@ -443,7 +442,6 @@ int read_conf_file(const char *path_conf)
                 fprintf(stderr, "<%s:%d> Error getgrgid(): %u\n", __func__, __LINE__, c.server_gid);
                 exit(1);
             }
-            c.server_gid = groupbuf->gr_gid;
         }
         else
         {

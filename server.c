@@ -43,38 +43,38 @@ void create_proc(int NumChld)
     }
     //------------------------------------------------------------------
     pid_t pid_child;
-    int numChld = 0;
-    while (numChld < NumChld)
+    int i = 0;
+    while (i < NumChld)
     {
         char s[32];
-        snprintf(s, sizeof(s), "unix_sock_%d", numChld);
+        snprintf(s, sizeof(s), "unix_sock_%d", i);
         
-        pid_child = create_child(numChld, from_chld);
+        pid_child = create_child(i, from_chld);
         if (pid_child < 0)
         {
-            print_err("[%d]<%s:%d> Error create_child() %d\n", numChld, __func__, __LINE__, numChld);
+            print_err("[%d]<%s:%d> Error create_child()\n", i, __func__, __LINE__);
             exit(1);
         }
-        ++numChld;
+        ++i;
     }
     
     close(from_chld[1]);
     sleep(1);
-    numChld = 0;
-    while (numChld < NumChld)
+    i = 0;
+    while (i < NumChld)
     {
         char s[32];
-        snprintf(s, sizeof(s), "unix_sock_%d", numChld);
+        snprintf(s, sizeof(s), "unix_sock_%d", i);
         
-        if ((unixFD[numChld] = unixConnect(s)) < 0)
+        if ((unixFD[i] = unixConnect(s)) < 0)
         {
-            printf("[%d]<%s:%d> Error create_fcgi_socket(%s)=%d: %s\n", numChld, __func__, __LINE__, 
-                            s, unixFD[numChld], strerror(errno));
+            printf("[%d]<%s:%d> Error create_fcgi_socket(%s)=%d: %s\n", i, __func__, __LINE__, 
+                            s, unixFD[i], strerror(errno));
             exit(1);
         }
         
         remove(s);
-        ++numChld;
+        ++i;
     }
 }
 //======================================================================
@@ -97,7 +97,7 @@ int main(int argc, char *argv[])
         }
         memcpy(s, argv[1], n);
         s[n] = 0;
-        if (s[n-1] != '/')
+        if (s[n - 1] != '/')
         {
             s[n] = '/';
             s[++n] = 0;
@@ -258,6 +258,7 @@ int main(int argc, char *argv[])
             if (ret < 0)
             {
                 print_err("<%s:%d> Error sendClientSock()\n", __func__, __LINE__);
+                break;
             }
             
             close(clientSock);
@@ -279,17 +280,8 @@ int main(int argc, char *argv[])
         close(unixFD[i]);
     }
     
-    int numChld = 0;
-    while (numChld < conf->NumChld)
-    {
-        char s[32];
-        snprintf(s, sizeof(s), "unix_sock_%d", numChld);
-        
-        remove(s);
-        ++numChld;
-    }
-    //------------------------------------------------------------------
     close(from_chld[0]);
+    shutdown(sockServer, SHUT_RDWR);
     close(sockServer);
     
     while ((pid = wait(NULL)) != -1)
