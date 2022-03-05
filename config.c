@@ -62,6 +62,9 @@ int create_conf_file()
 
     fprintf(f, "MaxRequestsPerThr 100\n\n");
     
+    fprintf(f, "MaxSndFd   200\n");
+    fprintf(f, "TimeoutPoll 10\n\n");
+    
     fprintf(f, "ListenBacklog 128\n\n");
     
     fprintf(f, "MaxRequests 512\n\n");
@@ -182,6 +185,10 @@ int read_conf_file(const char *path_conf)
         else if (sscanf(p, "MaxRequestsPerThr %d", &c.MaxRequestsPerThr) == 1)
             continue;
         else if (sscanf(p, "ListenBacklog %d", &c.ListenBacklog) == 1)
+            continue;
+        else if (sscanf(p, "MaxSndFd %d", &c.MAX_SND_FD) == 1)
+            continue;
+        else if (sscanf(p, "TimeoutPoll %d", &c.TIMEOUT_POLL) == 1)
             continue;
         else if (sscanf(p, "MaxRequests %d", &c.MAX_REQUESTS) == 1)
             continue;
@@ -338,7 +345,7 @@ int read_conf_file(const char *path_conf)
     {
         printf("   [%s] : [%s]\n", i->scrpt_name, i->addr);
     }
-    //-------------------------log_dir----------------------------------
+    //------------------------------------------------------------------
     if (check_path(c.logDir, sizeof(c.logDir)) == -1)
     {
         fprintf(stderr, "!!! Error logDir [%s]\n", c.logDir);
@@ -349,7 +356,7 @@ int read_conf_file(const char *path_conf)
     //------------------------------------------------------------------
     if ((c.NumChld < 1) || (c.NumChld > 8))
     {
-        print_err("<%s:%d> Error NumChld = %d; [1 < NumChld <= 6]\n", __func__, __LINE__, c.NumChld);
+        fprintf(stderr, "<%s:%d> Error NumChld = %d; [1 < NumChld <= 6]\n", __func__, __LINE__, c.NumChld);
         exit(1);
     }
     
@@ -361,13 +368,13 @@ int read_conf_file(const char *path_conf)
     
     if (c.MinThreads < 1)
         c.MinThreads = 1;
-    //-------------------------root_dir---------------------------------
+    //------------------------------------------------------------------
     if (check_path(c.rootDir, sizeof(c.rootDir)) == -1)
     {
         fprintf(stderr, "!!! Error rootDir [%s]\n", c.rootDir);
         exit(1);
     }
-    //-------------------------cgi_dir----------------------------------
+    //------------------------------------------------------------------
     if (check_path(c.cgiDir, sizeof(c.cgiDir)) == -1)
     {
         c.cgiDir[0] = '\0';
@@ -382,7 +389,7 @@ int read_conf_file(const char *path_conf)
     else
     {
         printf("<%s:%d> lim.rlim_max=%lu, lim.rlim_cur=%lu\n", __func__, __LINE__, (unsigned long)lim.rlim_max, (unsigned long)lim.rlim_cur);
-        long max_fd = (c.MAX_REQUESTS * 2) + 8;
+        long max_fd = (c.MAX_REQUESTS * 2) + 8;// stdin, stdout, stderr, flog, flog_err, socket(inet), pipe, soket(unix)
         if (max_fd > (long)lim.rlim_cur)
         {
             if (max_fd > (long)lim.rlim_max)
@@ -416,9 +423,9 @@ int read_conf_file(const char *path_conf)
         if (*p == '\0')
         {
             struct passwd *passwdbuf = getpwuid(c.server_uid);
-            if (passwdbuf == NULL)
+            if (!passwdbuf)
             {
-                fprintf(stderr, "<%s:%d> Error getpwuid(): %u\n", __func__, __LINE__, c.server_uid);
+                fprintf(stderr, "<%s:%d> Error getpwuid(%u): %s\n", __func__, __LINE__, c.server_uid, strerror(errno));
                 exit(1);
             }
         }
@@ -427,7 +434,7 @@ int read_conf_file(const char *path_conf)
             struct passwd *passwdbuf = getpwnam(c.user);
             if (!passwdbuf)
             {
-                fprintf(stderr, "<%s:%d> Error getpwnam(): %s\n", __func__, __LINE__, c.user);
+                fprintf(stderr, "<%s:%d> Error getpwnam(%s): %s\n", __func__, __LINE__, c.user, strerror(errno));
                 exit(1);
             }
             c.server_uid = passwdbuf->pw_uid;
@@ -437,9 +444,9 @@ int read_conf_file(const char *path_conf)
         if (*p == '\0')
         {
             struct group *groupbuf = getgrgid(c.server_gid);
-            if (groupbuf == NULL)
+            if (!groupbuf)
             {
-                fprintf(stderr, "<%s:%d> Error getgrgid(): %u\n", __func__, __LINE__, c.server_gid);
+                fprintf(stderr, "<%s:%d> Error getgrgid(%u): %s\n", __func__, __LINE__, c.server_gid, strerror(errno));
                 exit(1);
             }
         }
@@ -448,7 +455,7 @@ int read_conf_file(const char *path_conf)
             struct group *groupbuf = getgrnam(c.group);
             if (!groupbuf)
             {
-                fprintf(stderr, "<%s:%d> Error getgrnam(): %s\n", __func__, __LINE__, c.group);
+                fprintf(stderr, "<%s:%d> Error getgrnam(%s): %s\n", __func__, __LINE__, c.group, strerror(errno));
                 exit(1);
             }
             c.server_gid = groupbuf->gr_gid;

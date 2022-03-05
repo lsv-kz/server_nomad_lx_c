@@ -1,16 +1,28 @@
 #include "server.h"
 #include <sys/sendfile.h>
 
-static Connect *list_start = NULL;
-static Connect *list_end = NULL;
+static Connect *recv_start = NULL;
+static Connect *recv_end = NULL;
 
-static Connect *list_new_start = NULL;
-static Connect *list_new_end = NULL;
+static Connect *recv_new_start = NULL;
+static Connect *recv_new_end = NULL;
+
+static Connect *snd_start = NULL;
+static Connect *snd_end = NULL;
+
+static Connect *snd_new_start = NULL;
+static Connect *snd_new_end = NULL;
+
+static Connect *pNext = NULL;
 
 static pthread_mutex_t mtx_ = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cond_ = PTHREAD_COND_INITIALIZER;
 
 static int close_thr = 0;
+//static int num_snd = 0, num_new_snd;
+static Connect **arr_conn = NULL;
+int num_proc_, ind_;
+static int count_ = 0;
 //======================================================================
 int send_part_file(Connect *req, char *buf, int size_buf)
 {
@@ -71,11 +83,8 @@ int send_part_file(Connect *req, char *buf, int size_buf)
     return wr;
 }
 //======================================================================
-static void del_from_list(Connect *r)
+static void del_from_recv_list(Connect *r)
 {
-    if (r->event == POLLOUT)
-        close(r->fd);
-    
     if (r->prev && r->next)
     {
         r->prev->next = r->next;
@@ -84,38 +93,92 @@ static void del_from_list(Connect *r)
     else if (r->prev && !r->next)
     {
         r->prev->next = r->next;
-        list_end = r->prev;
+        recv_end = r->prev;
     }
     else if (!r->prev && r->next)
     {
         r->next->prev = r->prev;
-        list_start = r->next;
+        recv_start = r->next;
     }
     else if (!r->prev && !r->next)
     {
-        list_start = list_end = NULL;
+        recv_start = recv_end = NULL;
     }
+}
+//======================================================================
+static void del_from_snd_list(Connect *r)
+{
+    if (r->prev && r->next)
+    {
+        r->prev->next = r->next;
+        r->next->prev = r->prev;
+    }
+    else if (r->prev && !r->next)
+    {
+        r->prev->next = r->next;
+        snd_end = r->prev;
+    }
+    else if (!r->prev && r->next)
+    {
+        r->next->prev = r->prev;
+        snd_start = r->next;
+    }
+    else if (!r->prev && !r->next)
+    {
+        snd_start = snd_end = NULL;
+    }
+}
+//======================================================================
+static void del_from_list(Connect *r)
+{
+    if (r->event == POLLOUT)
+    {
+        //--num_snd;
+        if (r == pNext)
+            pNext = r->next;
+        close(r->fd);
+        del_from_snd_list(r);
+    }
+    else if (r->event == POLLIN)
+        del_from_recv_list(r);
+    else
+        print_err("*** <%s:%d> event=0x%x\n", __func__, __LINE__, r->event);
 }
 //======================================================================
 int set_list(struct pollfd *fdwr)
 {
 pthread_mutex_lock(&mtx_);
-    if (list_new_start)
+    if (recv_new_start)
     {
-        if (list_end)
-            list_end->next = list_new_start;
+        if (recv_end)
+            recv_end->next = recv_new_start;
         else
-            list_start = list_new_start;
+            recv_start = recv_new_start;
         
-        list_new_start->prev = list_end;
-        list_end = list_new_end;
-        list_new_start = list_new_end = NULL;
+        recv_new_start->prev = recv_end;
+        recv_end = recv_new_end;
+        recv_new_start = recv_new_end = NULL;
     }
+    
+    if (snd_new_start)
+    {
+        if (snd_end)
+            snd_end->next = snd_new_start;
+        else
+            snd_start = snd_new_start;
+        
+        snd_new_start->prev = snd_end;
+        snd_end = snd_new_end;
+        snd_new_start = snd_new_end = NULL;
+    }
+    
+    //num_snd += num_new_snd;
+    //num_new_snd = 0;
 pthread_mutex_unlock(&mtx_);
     int i = 0;
     time_t t = time(NULL);
-    Connect *r = list_start, *next;
-    
+    //--------------------------- recv ---------------------------------
+    Connect *r = recv_start, *next = NULL;
     for ( ; r; r = next)
     {
         next = r->next;
@@ -126,6 +189,7 @@ pthread_mutex_unlock(&mtx_);
             print__err(r, "<%s:%d> Timeout = %ld\n", __func__, __LINE__, t - r->sock_timer);
             r->iReferer = MAX_HEADERS - 1;
             r->reqHeadersValue[r->iReferer] = "Timeout";
+            
             del_from_list(r);
             end_response(r);
         }
@@ -133,11 +197,70 @@ pthread_mutex_unlock(&mtx_);
         {
             if (r->sock_timer == 0)
                 r->sock_timer = t;
+
+            fdwr[i].fd = r->clientSocket;
+            fdwr[i].events = r->event;
+            arr_conn[i] = r;
+            ++i;
+        }
+    }
+    ind_ = i;
+    //-------------------------- send ----------------------------------
+    if (!pNext || !snd_start)
+        pNext = snd_start;
+    r = pNext;//   snd_start
+    next = NULL;
+    for ( int n_snd = 0; r; r = next)
+    {
+        next = r->next;
+        if (r->first_snd == 1)
+        {
+            r->first_snd = 0;
+            next = NULL;
+            break;
+        }
+        
+        if (((t - r->sock_timer) >= r->timeout) && (r->sock_timer != 0))
+        {
+            r->err = -1;
+            print__err(r, "<%s:%d> Timeout = %ld\n", __func__, __LINE__, t - r->sock_timer);
+            r->iReferer = MAX_HEADERS - 1;
+            r->reqHeadersValue[r->iReferer] = "Timeout";
+
+            del_from_list(r);
+            end_response(r);
+        }
+        else
+        {
+            if (n_snd == 0)
+                r->first_snd = 1; // set "first_snd"
+            
+            if (r->sock_timer == 0)
+                r->sock_timer = t;
             
             fdwr[i].fd = r->clientSocket;
             fdwr[i].events = r->event;
+            arr_conn[i] = r;
             ++i;
+            ++n_snd;
+            if (n_snd >= conf->MAX_SND_FD)
+                break;
         }
+        
+        if (!next)
+            next = snd_start;
+    }
+    
+    if (pNext)
+        pNext->first_snd = 0; // reset "first_snd"
+    
+    if (count_ < 10)
+        ++count_;
+    else
+    {
+        if (pNext)
+            pNext = pNext->next;
+        count_ = 0;
     }
 
     return i;
@@ -150,6 +273,7 @@ void *event_handler(void *arg)
     int ret = 1, n, wr;
     int size_buf = conf->SNDBUF_SIZE;
     char *rd_buf = NULL;
+    num_proc_ = num_chld;
     
     if (conf->SEND_FILE != 'y')
     {
@@ -167,12 +291,19 @@ void *event_handler(void *arg)
         print_err("[%d]<%s:%d> Error malloc(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
         exit(1);
     }
+    
+    arr_conn = malloc(sizeof(Connect*) * conf->MAX_REQUESTS);
+    if (!arr_conn)
+    {
+        print_err("[%d]<%s:%d> Error malloc(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
+        exit(1);
+    }
 
     while (1)
     {
 pthread_mutex_lock(&mtx_);
         
-        while ((!list_start) && (!list_new_start) && (!close_thr))
+        while ((!recv_start) && (!recv_new_start) && (!snd_start) && (!snd_new_start) && (!close_thr))
         {
             pthread_cond_wait(&cond_, &mtx_);
         }
@@ -186,7 +317,7 @@ pthread_mutex_unlock(&mtx_);
         if (count_resp == 0)
             continue;
         
-        ret = poll(fdwr, count_resp, 1);
+        ret = poll(fdwr, count_resp, conf->TIMEOUT_POLL);
         if (ret == -1)
         {
             print_err("[%d]<%s:%d> Error poll(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
@@ -197,11 +328,10 @@ pthread_mutex_unlock(&mtx_);
             continue;
         }
         
-        Connect *r = list_start, *next;
-        for (int i = 0; (i < count_resp) && (ret > 0) && r; r = next, ++i)
+        Connect *r = NULL;
+        for ( int i = 0; (i < count_resp) && (ret > 0); ++i)
         {
-            next = r->next;
-
+            r = arr_conn[i];
             if (fdwr[i].revents == POLLOUT)
             {
                 --ret;
@@ -225,7 +355,7 @@ pthread_mutex_unlock(&mtx_);
                 else if (wr == -EAGAIN)
                 {
                     r->sock_timer = 0;
-                    //print__err(r, "<%s:%d> Error: EAGAIN\n", __func__, __LINE__);
+                    print__err(r, "<%s:%d> Error: EAGAIN\n", __func__, __LINE__);
                 }
             }
             else if (fdwr[i].revents == POLLIN)
@@ -241,7 +371,7 @@ pthread_mutex_unlock(&mtx_);
                 else if (n > 0)
                 {
                     del_from_list(r);
-                    push_req(r);
+                    push_resp_list(r);
                 }
                 else
                     r->sock_timer = 0;
@@ -251,33 +381,37 @@ pthread_mutex_unlock(&mtx_);
                 --ret;
                 print__err(r, "<%s:%d> Error: revents=0x%x\n", __func__, __LINE__, fdwr[i].revents);
                 r->err = -1;
+                
                 del_from_list(r);
                 end_response(r);
             }
         }
     }
-    
+    print_err("[%d]<%s:%d> *** Exit send_files() ***\n", num_chld, __func__, __LINE__);
     if (conf->SEND_FILE != 'y')
         free(rd_buf);
     free(fdwr);
+    free(arr_conn);
     return NULL;
 }
 //======================================================================
 void push_pollout_list(Connect *req)
 {
     req->event = POLLOUT;
+    req->first_snd = 0;
     lseek(req->fd, req->offset, SEEK_SET);
     req->sock_timer = 0;
     req->next = NULL;
 pthread_mutex_lock(&mtx_);
-    req->prev = list_new_end;
-    if (list_new_start)
+    req->prev = snd_new_end;
+    if (snd_new_start)
     {
-        list_new_end->next = req;
-        list_new_end = req;
+        snd_new_end->next = req;
+        snd_new_end = req;
     }
     else
-        list_new_start = list_new_end = req;
+        snd_new_start = snd_new_end = req;
+    //++num_new_snd;
 pthread_mutex_unlock(&mtx_);
     pthread_cond_signal(&cond_);
 }
@@ -290,14 +424,14 @@ void push_pollin_list(Connect *req)
     req->sock_timer = 0;
     req->next = NULL;
 pthread_mutex_lock(&mtx_);
-    req->prev = list_new_end;
-    if (list_new_start)
+    req->prev = recv_new_end;
+    if (recv_new_start)
     {
-        list_new_end->next = req;
-        list_new_end = req;
+        recv_new_end->next = req;
+        recv_new_end = req;
     }
     else
-        list_new_start = list_new_end = req;
+        recv_new_start = recv_new_end = req;
     
 pthread_mutex_unlock(&mtx_);
     pthread_cond_signal(&cond_);

@@ -97,7 +97,10 @@ struct Config
     int SNDBUF_SIZE;
     
     char SEND_FILE;
-
+    
+    int MAX_SND_FD;
+    int TIMEOUT_POLL;
+    
     int MaxChldsCgi;
 
     int ListenBacklog;
@@ -108,7 +111,7 @@ struct Config
     int TimeoutKeepAlive;
     int TimeOut;
     int TimeoutCGI;
-
+    
     char rootDir[MAX_PATH];
     char cgiDir[MAX_PATH];
     char logDir[MAX_PATH];
@@ -155,6 +158,7 @@ typedef struct Connect{
     time_t    sock_timer;
     int       timeout;
     int       event;
+    int       first_snd;
     
     int       err;
     char      remoteAddr[64];
@@ -296,8 +300,8 @@ void start_req(void);
 void wait_close_req(int num_chld, int n);
 void timedwait_close_conn(void);
 void close_req(void);
-void push_req(Connect *req);
-Connect *pop_req(void);
+void push_resp_list(Connect *req);
+Connect *pop_resp_list(void);
 void end_response(Connect *req);
 void free_range(Connect *r);
 int end_thr(int);

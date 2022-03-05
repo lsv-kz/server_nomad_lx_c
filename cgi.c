@@ -50,7 +50,6 @@ pthread_mutex_lock(&mtx_chld);
     --num_chlds;
 pthread_mutex_unlock(&mtx_chld);
     pthread_cond_signal(&cond_close_cgi);
-//  pthread_cond_broadcast(&cond_close_cgi);
 }
 //======================================================================
 const char *cgi_script_file(const char *name)

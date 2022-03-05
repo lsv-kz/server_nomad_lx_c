@@ -69,7 +69,7 @@ pthread_mutex_lock(&mtx_thr);
 pthread_mutex_unlock(&mtx_thr);
 }
 //======================================================================
-void push_req(Connect *req)
+void push_resp_list(Connect *req)
 {
 pthread_mutex_lock(&mtx_thr);
     req->next = NULL;
@@ -87,29 +87,27 @@ pthread_mutex_unlock(&mtx_thr);
     pthread_cond_signal(&cond_list);
 }
 //======================================================================
-Connect *pop_req(void)
+Connect *pop_resp_list(void)
 {
 pthread_mutex_lock(&mtx_thr);
     ++num_wait_thr;
-    while (list_start == NULL)
+    while ((list_start == NULL) && (!stop_manager))
     {
         pthread_cond_wait(&cond_list, &mtx_thr);
     }
     --num_wait_thr;
     Connect *req = list_start;
-    if (list_start->next)
+    if (list_start && list_start->next)
     {
         list_start->next->prev = NULL;
         list_start = list_start->next;
     }
     else
         list_start = list_end = NULL;
-    
     --size_list;
 pthread_mutex_unlock(&mtx_thr);
     if (num_wait_thr <= 1)
         pthread_cond_signal(&cond_new_thr);
-    
     return req;
 }
 //======================================================================
@@ -135,7 +133,6 @@ pthread_mutex_lock(&mtx_thr);
         ret = EXIT_THR;
     }
 pthread_mutex_unlock(&mtx_thr);
-
     if (ret)
     {
         pthread_cond_broadcast(&cond_exit_thr);
@@ -148,6 +145,7 @@ void close_manager()
     stop_manager = 1;
     pthread_cond_signal(&cond_new_thr);
     pthread_cond_signal(&cond_exit_thr);
+    pthread_cond_broadcast(&cond_list);
 }
 //======================================================================
 static int fd_close_conn;
@@ -297,6 +295,9 @@ int manager(int sockServer, int numChld, int to_parent)
     nChld = numChld;
     servSock = sockServer;
     
+    signal(SIGUSR1, SIG_IGN);
+    signal(SIGUSR2, SIG_IGN);
+    
     if (signal(SIGINT, signal_handler) == SIG_ERR)
     {
         print_err("<%s:%d> Error signal(SIGINT): %s\n", __func__, __LINE__, strerror(errno));
@@ -318,7 +319,7 @@ int manager(int sockServer, int numChld, int to_parent)
     for (i = 0; i < conf->MinThreads; ++i)
     {
         n = create_thread(&numChld);
-        if(n)
+        if (n)
         {
             print_err("<%s:%d> Error create_thread() %d \n", __func__, __LINE__, i);
             break;
@@ -343,7 +344,7 @@ int manager(int sockServer, int numChld, int to_parent)
     }
     //------------------------------------------------------------------
     n = pthread_create(&thr_man, NULL, thr_create_manager, par);
-    if(n)
+    if (n)
     {
         printf("<%s> Error pthread_create(): %s\n", __func__, strerror(n));
         exit(1);
@@ -372,7 +373,7 @@ int manager(int sockServer, int numChld, int to_parent)
         
         int opt = 1;
         ioctl(clientSocket, FIONBIO, &opt);
-
+        
         req->numChld = numChld;
         req->numConn = allConn++;
         req->numReq = 0;
@@ -402,7 +403,7 @@ int manager(int sockServer, int numChld, int to_parent)
     pthread_join(thr_handler, NULL);
 
     free_fcgi_list();
-    
+    sleep(1);
     return 0;
 }
 //======================================================================

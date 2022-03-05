@@ -389,6 +389,7 @@ int send_fd(int unix_sock, int fd, void *data, int size_data)
     struct iovec iov;
     ssize_t ret;
     char   buf[CMSG_SPACE(sizeof(int))];
+    memset(buf, 0, sizeof(buf));
     
     msgh.msg_name = NULL;
     msgh.msg_namelen = 0;
@@ -398,16 +399,21 @@ int send_fd(int unix_sock, int fd, void *data, int size_data)
     iov.iov_base = data;
     iov.iov_len = size_data;
     
-    msgh.msg_control = buf;
-    msgh.msg_controllen = sizeof(buf);
-    
-    memset(buf, 0, sizeof(buf));
-    
-    struct cmsghdr *cmsgp = CMSG_FIRSTHDR(&msgh);
-    cmsgp->cmsg_len = CMSG_LEN(sizeof(int));
-    cmsgp->cmsg_level = SOL_SOCKET;
-    cmsgp->cmsg_type = SCM_RIGHTS;
-    memcpy(CMSG_DATA(cmsgp), &fd, sizeof(int));
+    if (fd != -1)
+    {
+        msgh.msg_control = buf;
+        msgh.msg_controllen = sizeof(buf);
+        struct cmsghdr *cmsgp = CMSG_FIRSTHDR(&msgh);
+        cmsgp->cmsg_len = CMSG_LEN(sizeof(int));
+        cmsgp->cmsg_level = SOL_SOCKET;
+        cmsgp->cmsg_type = SCM_RIGHTS;
+        memcpy(CMSG_DATA(cmsgp), &fd, sizeof(int));
+    }
+    else
+    {
+        msgh.msg_control = NULL;
+        msgh.msg_controllen = 0;
+    }
     
     ret = sendmsg(unix_sock, &msgh, 0);
     if (ret == -1)
@@ -441,25 +447,25 @@ int recv_fd(int unix_sock, int num_chld, void *data, int size_data)
     if (nr == -1)
     {
         print_err("[%d]<%s:%d> Error recvmsg(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
-        return -2;
+        return -1;
     }
     
     struct cmsghdr *cmsgp = CMSG_FIRSTHDR(&msgh);
 
     if (cmsgp == NULL || cmsgp->cmsg_len != CMSG_LEN(sizeof(int)))
     {
-        print_err("[%d]<%s:%d> bad cmsg header / message length\n", num_chld, __func__, __LINE__);
-        return -3;
+        print_err("[%d]<%s:%d> bad cmsg header\n", num_chld, __func__, __LINE__);
+        return -1;
     }
     if (cmsgp->cmsg_level != SOL_SOCKET)
     {
         print_err("[%d]<%s:%d> cmsg_level != SOL_SOCKET\n", num_chld, __func__, __LINE__);
-        return -4;
+        return -1;
     }
     if (cmsgp->cmsg_type != SCM_RIGHTS)
     {
         print_err("[%d]<%s:%d> cmsg_type != SCM_RIGHTS\n", num_chld, __func__, __LINE__);
-        return -5;
+        return -1;
     }
 
     memcpy(&fd, CMSG_DATA(cmsgp), sizeof(int));

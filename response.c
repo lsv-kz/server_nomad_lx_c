@@ -2,7 +2,7 @@
 
 void init_struct_request(Connect *req);
 int response2(Connect *req);
-/*====================================================================*/
+//======================================================================
 void response1(int num_chld)
 {
     int n;
@@ -12,10 +12,9 @@ void response1(int num_chld)
 
     while(1)
     {
-        req = pop_req();
-        if(!req)
+        req = pop_resp_list();
+        if (!req)
         {
-            print_err("<%s:%d> req = NULL\n", __func__, __LINE__);
             end_thr(1);
             return;
         }
@@ -189,7 +188,7 @@ long long file_size(const char *s)
 {
     struct stat st;
 
-    if(!stat(s, &st))
+    if (!stat(s, &st))
         return st.st_size;
     else
         return -1;
@@ -238,7 +237,7 @@ int response2(Connect *req)
             return -RS404;
         }
         
-        if(stat(req->decodeUri + 1, &st) == -1)
+        if (stat(req->decodeUri + 1, &st) == -1)
         {
             print_err("<%s:%d> script (%s) not found\n", __func__, __LINE__, req->decodeUri);
             return -RS404;
@@ -291,22 +290,22 @@ int response2(Connect *req)
     //------------------------------------------------------------------
     if (lstat(Str(req->path), &st) == -1)
     {
-        if(errno == EACCES)
+        if (errno == EACCES)
             return -RS403;
         return fastcgi(req, req->decodeUri);
     }
     else
     {
-        if((!S_ISDIR(st.st_mode)) && (!S_ISREG(st.st_mode)))
+        if ((!S_ISDIR(st.st_mode)) && (!S_ISREG(st.st_mode)))
         {
             print_err("<%s:%d> Error: file (!S_ISDIR && !S_ISREG) \n", __func__, __LINE__);
             return -RS403;
         }
     }
     //------------------------------------------------------------------
-    if(S_ISDIR(st.st_mode))
+    if (S_ISDIR(st.st_mode))
     {
-        if(req->uri[req->uriLen - 1] != '/')
+        if (req->uri[req->uriLen - 1] != '/')
         {
             req->uri[req->uriLen++] = '/';
             req->uri[req->uriLen] = '\0';
@@ -344,7 +343,7 @@ int response2(Connect *req)
             return -RS500;
         }
 
-        if((stat(Str(req->path), &st) != 0) || (conf->index_html != 'y'))
+        if ((stat(Str(req->path), &st) != 0) || (conf->index_html != 'y'))
         {
             errno = 0;
             
@@ -355,7 +354,7 @@ int response2(Connect *req)
                 char *NameScript = "index.php";
                 int lenNameScript = strlen(NameScript);
                 str_cat(req->path, "index.php");
-                if(!stat(Str(req->path), &st))
+                if (!stat(Str(req->path), &st))
                 {
                     String scriptName = str_init(req->uriLen + lenNameScript + 1);
                     if (scriptName.err == 0)
@@ -389,7 +388,7 @@ int response2(Connect *req)
 
             str_resize(req->path, lenPath);
 
-            if(conf->index_pl == 'y')
+            if (conf->index_pl == 'y')
             {
                 req->scriptType = cgi_ex;
                 req->scriptName = "/cgi-bin/index.pl";
@@ -397,7 +396,7 @@ int response2(Connect *req)
                 req->scriptName = NULL;
                 return ret;
             }
-            else if(conf->index_fcgi == 'y')
+            else if (conf->index_fcgi == 'y')
             {
                 req->scriptType = fast_cgi;
                 req->scriptName = "/index.fcgi";
@@ -414,10 +413,10 @@ int response2(Connect *req)
     req->numPart = 0;
     req->respContentType = content_type(Str(req->path));
 
-    if(req->iRange >= 0)
+    if (req->iRange >= 0)
     {
         req->numPart = get_ranges(req);
-        if(req->numPart > 1)
+        if (req->numPart > 1)
         {
             if (req->reqMethod == M_HEAD)
                 return -RS405;
@@ -526,17 +525,17 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
         return -1;
     }
     
-    for(i = 0; i < req->numPart; i++)
+    for (i = 0; i < req->numPart; i++)
     {
         range = &req->rangeBytes[i];
-        if((n = create_multipart_head(req, range, buf, sizeof(buf))) == 0)
+        if ((n = create_multipart_head(req, range, buf, sizeof(buf))) == 0)
         {
             print_err("<%s:%d> Error create_multipart_head()=%d\n", __func__, __LINE__, n);
             return -1;
         } 
 
         n = write_timeout(req->clientSocket, buf, strlen(buf), conf->TimeOut);
-        if(n < 0)
+        if (n < 0)
         {
             print_err("<%s:%d> Error: Sent %lld bytes from %lld bytes\n", __func__, __LINE__, send_all_bytes, all_bytes);
             return -1;
@@ -544,7 +543,7 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
 
         len = range->part_len;
         n = send_file_ux(req->clientSocket, req->fd, rd_buf, size_buf, range->start, &range->part_len);
-        if(n < 0)
+        if (n < 0)
         {
             print_err("<%s:%d> Error: Sent %lld bytes from %lld bytes\n", __func__, __LINE__, 
                     send_all_bytes += (len - range->part_len), all_bytes);
@@ -555,7 +554,7 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
 
         snprintf(buf, sizeof(buf), "%s", "\r\n");
         n = write_timeout(req->clientSocket, buf, 2, conf->TimeOut);
-        if(n < 0)
+        if (n < 0)
         {
             print_err("<%s:%d> Error: Sent %lld bytes from %lld bytes\n", __func__, __LINE__, send_all_bytes, all_bytes);
             return -1;
@@ -565,7 +564,7 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
     snprintf(buf, sizeof(buf), "--%s--\r\n", boundary);
     n = write_timeout(req->clientSocket, buf, strlen(buf), conf->TimeOut);
     req->send_bytes = send_all_bytes;
-    if(n < 0)
+    if (n < 0)
     {
         print_err("<%s:%d> Error: Sent %lld bytes from %lld bytes\n", __func__, __LINE__, send_all_bytes, all_bytes);
         return -1;
