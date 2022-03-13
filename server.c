@@ -108,7 +108,7 @@ void create_proc(int NumChld)
 //======================================================================
 void print_help(const char *name)
 {
-    fprintf(stderr, "Usage: %s [-c configfile] [-p pid] [-s signal]\n", name);
+    fprintf(stderr, "Usage: %s [-c configfile] [-p pid] [-s signal]\n   signals: restart\n", name);
     exit(EXIT_FAILURE);
 }
 //======================================================================
@@ -126,7 +126,7 @@ int main(int argc, char *argv[])
         int c;
         pid_t pid_ = 0;
         char *sig = NULL, *conf_dir_ = NULL, *p;
-        while ((c = getopt(argc, argv, "c:p:s:")) != -1)
+        while ((c = getopt(argc, argv, "c:p:s:h")) != -1)
         {
             switch (c)
             {
@@ -144,6 +144,9 @@ int main(int argc, char *argv[])
                     break;
                 case 's':
                     sig = optarg;
+                    break;
+                case 'h':
+                    print_help(argv[0]);
                     break;
                 default:
                     print_help(argv[0]);
@@ -165,6 +168,7 @@ int main(int argc, char *argv[])
             else
             {
                 fprintf(stderr, "<%d> ? pid=%u, %s\n", __LINE__, pid_, sig);
+                print_help(argv[0]);
                 exit(1);
             }
             return 0;
