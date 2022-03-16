@@ -19,7 +19,7 @@ static pthread_mutex_t mtx_ = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cond_ = PTHREAD_COND_INITIALIZER;
 
 static int close_thr = 0;
-//static int num_snd = 0, num_new_snd;
+
 static Connect **arr_conn = NULL;
 int num_proc_, ind_;
 static int count_ = 0;
@@ -133,7 +133,6 @@ static void del_from_list(Connect *r)
 {
     if (r->event == POLLOUT)
     {
-        //--num_snd;
         if (r == pNext)
             pNext = r->next;
         close(r->fd);
@@ -172,8 +171,6 @@ pthread_mutex_lock(&mtx_);
         snd_new_start = snd_new_end = NULL;
     }
     
-    //num_snd += num_new_snd;
-    //num_new_snd = 0;
 pthread_mutex_unlock(&mtx_);
     int i = 0;
     time_t t = time(NULL);
@@ -208,7 +205,7 @@ pthread_mutex_unlock(&mtx_);
     //-------------------------- send ----------------------------------
     if (!pNext || !snd_start)
         pNext = snd_start;
-    r = pNext;//   snd_start
+    r = pNext;
     next = NULL;
     for ( int n_snd = 0; r; r = next)
     {

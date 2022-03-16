@@ -147,7 +147,7 @@ int main(int argc, char *argv[])
                     break;
                 case 'h':
                     print_help(argv[0]);
-                    break;
+                    exit(0);
                 default:
                     print_help(argv[0]);
                     exit(0);
