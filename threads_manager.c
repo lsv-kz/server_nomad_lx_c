@@ -16,12 +16,7 @@ int stop_manager = 0, need_create_thr = 0;
 
 int get_num_cgi();
 
-static int nChld;
-//======================================================================
-int get_num_chld(void)
-{
-    return nChld;
-}
+static int nProc;
 //======================================================================
 int get_num_thr(void)
 {
@@ -162,7 +157,7 @@ void end_response(Connect *req)
     pthread_mutex_lock(&mtx_conn);
         --count_conn;
     pthread_mutex_unlock(&mtx_conn);
-        char ch = nChld;
+        char ch = nProc;
         if (write(fd_close_conn, &ch, 1) <= 0)
         {
             print_err("<%s:%d> Error write(): %s\n", __func__, __LINE__, strerror(errno));
@@ -198,12 +193,12 @@ pthread_mutex_unlock(&mtx_conn);
 //======================================================================
 void *thread_client(void *req);
 //======================================================================
-int create_thread(int *num_chld)
+int create_thread(int *num_proc)
 {
     int n;
     pthread_t thr;
 
-    n = pthread_create(&thr, NULL, thread_client, num_chld);
+    n = pthread_create(&thr, NULL, thread_client, num_proc);
     if (n)
     {
         // errno = 12; n = 11
@@ -223,7 +218,7 @@ int create_thread(int *num_chld)
 //======================================================================
 void *thr_create_manager(void *par)
 {
-    int num_chld = *((int*)par);
+    int num_proc = *((int*)par);
     int num_thr;
 
     while (1)
@@ -231,10 +226,10 @@ void *thr_create_manager(void *par)
         if (wait_create_thr(&num_thr))
             break;
 
-        int n = create_thread(&num_chld);
+        int n = create_thread(&num_proc);
         if (n)
         {
-            print_err("[%d] <%s:%d> Error create thread: num_thr=%d, all_thr=%u, errno=%d\n", num_chld, __func__, __LINE__, num_thr, all_thr, n);
+            print_err("[%d] <%s:%d> Error create thread: num_thr=%d, all_thr=%u, errno=%d\n", num_proc, __func__, __LINE__, num_thr, all_thr, n);
             wait_exit_thr(num_thr);
         }
         else
@@ -254,19 +249,19 @@ static void signal_handler(int sig)
 {
     if (sig == SIGINT)
     {
-        //print_err("[%d] <%s:%d> ### SIGINT ###\n", nChld, __func__, __LINE__);
+        //print_err("[%d] <%s:%d> ### SIGINT ###\n", nProc, __func__, __LINE__);
         shutdown(servSock, SHUT_RDWR);
         close(servSock);
         close(uxSock);
     }
     else if (sig == SIGSEGV)
     {
-        print_err("[%d] <%s:%d> ### SIGSEGV ###\n", nChld, __func__, __LINE__);
+        print_err("[%d] <%s:%d> ### SIGSEGV ###\n", nProc, __func__, __LINE__);
         exit(1);
     }
 }
 //======================================================================
-int manager(int sockServer, int numChld, int to_parent)
+int manager(int sockServer, int numProc, int to_parent)
 {
     int n;
     unsigned long allConn = 0, i;
@@ -274,25 +269,25 @@ int manager(int sockServer, int numChld, int to_parent)
     pthread_t thr_handler, thr_man;
     int par[3];
     char nameSock[32];
-    snprintf(nameSock, sizeof(nameSock), "unix_sock_%d", numChld);
+    snprintf(nameSock, sizeof(nameSock), "unix_sock_%d", numProc);
     
     if (remove(nameSock) == -1 && errno != ENOENT)
     {
-        print_err("[%n]<%s:%d> Error remove(%s): %s\n", numChld, __func__, __LINE__, nameSock, strerror(errno));
+        print_err("[%n]<%s:%d> Error remove(%s): %s\n", numProc, __func__, __LINE__, nameSock, strerror(errno));
         exit(1);
     }
     
     int unixSock = unixBind(nameSock, SOCK_DGRAM);
     if (unixSock == -1)
     {
-        print_err("[%u]<%s:%d> Error unixBind()=%d\n", numChld, __func__, __LINE__, unixSock);
+        print_err("[%u]<%s:%d> Error unixBind()=%d\n", numProc, __func__, __LINE__, unixSock);
         exit(1);
     }
     
     uxSock = unixSock;
 
     fd_close_conn = to_parent;
-    nChld = numChld;
+    nProc = numProc;
     servSock = sockServer;
     
     signal(SIGUSR1, SIG_IGN);
@@ -312,13 +307,13 @@ int manager(int sockServer, int numChld, int to_parent)
     //------------------------------------------------------------------
     if (chdir(conf->rootDir))
     {
-        print_err("[%d] <%s:%d> Error chdir(%s): %s\n", numChld, __func__, __LINE__, conf->rootDir, strerror(errno));
+        print_err("[%d] <%s:%d> Error chdir(%s): %s\n", numProc, __func__, __LINE__, conf->rootDir, strerror(errno));
         exit(1);
     }
     //------------------------------------------------------------------
     for (i = 0; i < conf->MinThreads; ++i)
     {
-        n = create_thread(&numChld);
+        n = create_thread(&numProc);
         if (n)
         {
             print_err("<%s:%d> Error create_thread() %d \n", __func__, __LINE__, i);
@@ -329,12 +324,14 @@ int manager(int sockServer, int numChld, int to_parent)
     
     if (get_num_thr() > conf->MinThreads)
     {
-        print_err("[%d:%s:%d] Error num threads=%d\n", numChld, __func__, __LINE__, get_num_thr());
+        print_err("[%d:%s:%d] Error num threads=%d\n", numProc, __func__, __LINE__, get_num_thr());
         exit(1);
     }
-    printf("[%d:%s:%d] +++++ num threads=%d, pid=%d +++++\n", numChld, __func__, __LINE__, get_num_thr(), getpid());
+    
+    printf("[%d:%s:%d] +++++ num threads=%d, pid=%d, uid=%d, gid=%d +++++\n", numProc, __func__, 
+                                __LINE__, get_num_thr(), getpid(), getuid(), getgid());
     all_thr = num_thr;
-    par[0] = numChld;
+    par[0] = numProc;
     //------------------------------------------------------------------
     n = pthread_create(&thr_handler, NULL, event_handler, par);
     if (n)
@@ -355,10 +352,10 @@ int manager(int sockServer, int numChld, int to_parent)
         struct sockaddr_storage clientAddr;
         socklen_t addrSize = sizeof(struct sockaddr_storage);
         
-        int clientSocket = recv_fd(unixSock, numChld, &clientAddr, addrSize);
+        int clientSocket = recv_fd(unixSock, numProc, &clientAddr, addrSize);
         if (clientSocket < 0)
         {
-            print_err("[%d]<%s:%d> Error recv_fd()\n", numChld, __func__, __LINE__);
+            print_err("[%d]<%s:%d> Error recv_fd()\n", numProc, __func__, __LINE__);
             break;
         }
 
@@ -374,7 +371,7 @@ int manager(int sockServer, int numChld, int to_parent)
         int opt = 1;
         ioctl(clientSocket, FIONBIO, &opt);
         
-        req->numChld = numChld;
+        req->numProc = numProc;
         req->numConn = allConn++;
         req->numReq = 0;
         req->serverSocket = sockServer;
@@ -393,7 +390,7 @@ int manager(int sockServer, int numChld, int to_parent)
         push_pollin_list(req);
     }
     
-    print_err("<%d> thr=%d, allThr=%d, open_conn=%d, allConn=%d\n", numChld, count_thr, all_thr, count_conn, allConn);
+    print_err("<%d> thr=%d, allThr=%d, open_conn=%d, allConn=%d\n", numProc, count_thr, all_thr, count_conn, allConn);
     i = count_thr;
     
     close_manager();

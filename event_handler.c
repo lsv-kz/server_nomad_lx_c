@@ -19,7 +19,6 @@ static pthread_mutex_t mtx_ = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cond_ = PTHREAD_COND_INITIALIZER;
 
 static int close_thr = 0;
-
 static Connect **arr_conn = NULL;
 int num_proc_, ind_;
 static int count_ = 0;

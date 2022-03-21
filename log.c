@@ -78,7 +78,7 @@ void print__err(Connect *req, const char *format, ...)
     get_time(buf + 1, sizeof(buf) - 1);
     strcat(buf, "] - ");
     int len = strlen(buf);
-    snprintf(buf + len, sizeof(buf) - len, "[%u/%u/%u] ", req->numChld, req->numConn, req->numReq);
+    snprintf(buf + len, sizeof(buf) - len, "[%u/%u/%u] ", req->numProc, req->numConn, req->numReq);
     len = strlen(buf);
     va_start(ap, format);
     vsnprintf(buf + len, sizeof(buf) - len, format, ap);
@@ -95,7 +95,7 @@ void print_log(Connect *req)
     int len;
         
     snprintf(buf, size,"%d/%d/%d - %s - [%s] - ",     
-                req->numChld,
+                req->numProc,
                 req->numConn,
                 req->numReq,
                 req->remoteAddr,

@@ -150,7 +150,7 @@ typedef struct Connect{
     struct Connect *prev;
     struct Connect *next;
     
-    unsigned int numChld, numReq, numConn;
+    unsigned int numProc, numReq, numConn;
     int       serverSocket;
     int       serverPort;
     int       clientSocket;

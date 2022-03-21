@@ -19,23 +19,23 @@ static void signal_handler(int sig)
 {
     if (sig == SIGINT)
     {
-        print_err("<main> ######  SIGINT  ######\n");
+        fprintf(stderr, "<main> ######  SIGINT  ######\n");
     }
     else if (sig == SIGSEGV)
     {
-        print_err("<main> ######  SIGSEGV  ######\n");
+        fprintf(stderr, "<main> ######  SIGSEGV  ######\n");
         exit(1);
     }
     else if (sig == SIGUSR1)
     {
-        print_err("<main> ####### SIGUSR1 #######\n");
+        fprintf(stderr, "<main> ####### SIGUSR1 #######\n");
         char ch[1];
         for (int i = 0; i < conf->NumChld; ++i)
         {
             int ret = send_fd(unixFD[i], -1, ch, 1);
             if (ret < 0)
             {
-                print_err("<%s:%d> Error sendClientSock()\n", __func__, __LINE__);
+                fprintf(stderr, "<%s:%d> Error sendClientSock()\n", __func__, __LINE__);
                 if (kill(pidArr[i], SIGKILL))
                 {
                     fprintf(stderr, "<%s:%d> Error: kill(%u, %u)\n", __func__, __LINE__, pidArr[i], SIGKILL);
@@ -44,34 +44,27 @@ static void signal_handler(int sig)
             }
         }
         
-        pid_t pid;
-        while ((pid = wait(NULL)) != -1)
-        {
-            print_err("<> wait() pid: %d\n", pid);
-            continue;
-        }
-
         restart = 1;
     }
     else
     {
-        print_err("sig=%d\n", sig);
+        fprintf(stderr, "sig=%d\n", sig);
     }
 }
 //======================================================================
 pid_t create_child(int num_chld, int *from_chld);
 //======================================================================
-void create_proc(int NumChld)
+void create_proc(int NumProc)
 {
     if (pipe(from_chld) < 0)
     {
-        printf("<%s():%d> Error pipe(): %s\n", __FUNCTION__, __LINE__, strerror(errno));
+        fprintf(stderr, "<%s():%d> Error pipe(): %s\n", __FUNCTION__, __LINE__, strerror(errno));
         exit(1);
     }
     //------------------------------------------------------------------
     pid_t pid_child;
     int i = 0;
-    while (i < NumChld)
+    while (i < NumProc)
     {
         char s[32];
         snprintf(s, sizeof(s), "unix_sock_%d", i);
@@ -79,7 +72,7 @@ void create_proc(int NumChld)
         pid_child = create_child(i, from_chld);
         if (pid_child < 0)
         {
-            print_err("[%d]<%s:%d> Error create_child()\n", i, __func__, __LINE__);
+            fprintf(stderr, "[%d]<%s:%d> Error create_child()\n", i, __func__, __LINE__);
             exit(1);
         }
         pidArr[i] = pid_child;
@@ -89,14 +82,14 @@ void create_proc(int NumChld)
     close(from_chld[1]);
     sleep(1);
     i = 0;
-    while (i < NumChld)
+    while (i < NumProc)
     {
         char s[32];
         snprintf(s, sizeof(s), "unix_sock_%d", i);
         
         if ((unixFD[i] = unixConnect(s)) < 0)
         {
-            printf("[%d]<%s:%d> Error create_fcgi_socket(%s)=%d: %s\n", i, __func__, __LINE__, 
+            fprintf(stderr, "[%d]<%s:%d> Error create_fcgi_socket(%s)=%d: %s\n", i, __func__, __LINE__, 
                             s, unixFD[i], strerror(errno));
             exit(1);
         }
@@ -257,7 +250,7 @@ int main_proc()
     }
     
     create_proc(conf->NumChld);
-    printf("   pid main proc: %d\n", pid);
+    printf("   pid=%d, uid=%d, gid=%d\n", pid, getuid(), getgid());
     
     if (signal(SIGUSR1, signal_handler) == SIG_ERR)
     {
@@ -378,7 +371,7 @@ int main_proc()
     
     while ((pid = wait(NULL)) != -1)
     {
-        print_err("<> wait() pid: %d\n", pid);
+        fprintf(stderr, "<%d> wait() pid: %d\n", __LINE__, pid);
     }
     
     free_fcgi_list();
