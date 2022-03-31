@@ -283,10 +283,6 @@ int main_proc()
     
     while (!close_server)
     {
-        int ret, clientSock;
-        num_fdrd = 2;
-        i_fd = -1;
-        
         for (i_fd = 0; i_fd < conf->NumChld; ++i_fd)
         {
             if (numConn[i_fd] < conf->MAX_REQUESTS)
@@ -295,25 +291,22 @@ int main_proc()
         
         if (i_fd >= conf->NumChld)
             num_fdrd = 1;
+        else
+            num_fdrd = 2;
         
         int ret_poll = poll(fdrd, num_fdrd, -1);
-        if (ret_poll == -1)
+        if (ret_poll <= 0)
         {
             print_err("<%s:%d> Error poll()=-1: %s\n", __func__, __LINE__, strerror(errno));
             if (errno == EINTR)
                 continue;
             break;
         }
-        else if (ret_poll == 0)
-        {
-            print_err("<%s:%d> ???\n", __func__, __LINE__);
-            break;
-        }
         
         if (fdrd[0].revents == POLLIN)
         {
             unsigned char s[8];
-            ret = read(from_chld[0], s, sizeof(s));
+            int ret = read(from_chld[0], s, sizeof(s));
             if (ret <= 0)
             {
                 print_err("<%s:%d> Error read()=%d: %s\n", __func__, __LINE__, ret, strerror(errno));
@@ -332,15 +325,14 @@ int main_proc()
             struct sockaddr_storage clientAddr;
             socklen_t addrSize = sizeof(struct sockaddr_storage);// 128
             
-            clientSock = accept(sockServer, (struct sockaddr *)&clientAddr, &addrSize);
+            int clientSock = accept(sockServer, (struct sockaddr *)&clientAddr, &addrSize);
             if (clientSock == -1)
             {
                 print_err("<%s:%d> Error accept()=-1: %s\n", __func__, __LINE__, strerror(errno));
                 break;
             }
             
-            ret = send_fd(unixFD[i_fd], clientSock, &clientAddr, addrSize);
-            if (ret < 0)
+            if (send_fd(unixFD[i_fd], clientSock, &clientAddr, addrSize) < 0)
             {
                 print_err("<%s:%d> Error sendClientSock()\n", __func__, __LINE__);
                 break;
