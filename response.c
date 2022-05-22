@@ -79,7 +79,12 @@ void response1(int num_chld)
             }
         }
 
-        decode(req->uri, req->uriLen, req->decodeUri, sizeof(req->decodeUri) - 1);
+        if (decode(req->uri, req->uriLen, req->decodeUri, sizeof(req->decodeUri)) <= 0)
+        {
+            print__err(req, "<%s:%d> Error: decode URI\n", __func__, __LINE__);
+            req->err = -RS404;
+            goto end;
+        }
         clean_path(req->decodeUri);
         req->lenDecodeUri = strlen(req->decodeUri);
         
@@ -181,7 +186,7 @@ void *thread_client(void *arg)
 int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size);
 int read_dir(Connect *req);
 int get_ranges(Connect *req);
-int create_multipart_head(Connect *req, struct Range *ranges, char *buf, int len_buf);
+int create_multipart_head(Connect *req, Range *ranges, char *buf, int len_buf);
 const char boundary[] = "---------a9b5r7a4c0a2d5a1b8r3a";
 //======================================================================
 long long file_size(const char *s)
@@ -250,7 +255,7 @@ int response2(Connect *req)
             return -RS500;
         }
         str_cat(&scriptName, req->decodeUri);
-        req->scriptName = Str(&scriptName);
+        req->scriptName = str_ptr(&scriptName);
         
         if (!strcmp(conf->UsePHP, "php-fpm"))
         {
@@ -281,14 +286,14 @@ int response2(Connect *req)
             return -RS500;
         }
         str_cat(&scriptName, req->decodeUri);
-        req->scriptName = Str(&scriptName);
+        req->scriptName = str_ptr(&scriptName);
         ret = cgi(req);
         str_free(&scriptName);
         req->scriptName = NULL;
         return ret;
     }
     //------------------------------------------------------------------
-    if (lstat(Str(req->path), &st) == -1)
+    if (lstat(str_ptr(req->path), &st) == -1)
     {
         if (errno == EACCES)
             return -RS403;
@@ -322,7 +327,7 @@ int response2(Connect *req)
                 str_cat(&s, "\">here</a>.");
                 if (s.err == 0)
                 {
-                    send_message(req, &hdrs, Str(&s));
+                    send_message(req, &hdrs, str_ptr(&s));
                 }
                 else
                     print_err("<%s:%d> Error: malloc()\n", __func__, __LINE__);
@@ -343,7 +348,7 @@ int response2(Connect *req)
             return -RS500;
         }
 
-        if ((stat(Str(req->path), &st) != 0) || (conf->index_html != 'y'))
+        if ((stat(str_ptr(req->path), &st) != 0) || (conf->index_html != 'y'))
         {
             errno = 0;
             
@@ -354,7 +359,7 @@ int response2(Connect *req)
                 char *NameScript = "index.php";
                 int lenNameScript = strlen(NameScript);
                 str_cat(req->path, "index.php");
-                if (!stat(Str(req->path), &st))
+                if (!stat(str_ptr(req->path), &st))
                 {
                     String scriptName = str_init(req->uriLen + lenNameScript + 1);
                     if (scriptName.err == 0)
@@ -363,7 +368,7 @@ int response2(Connect *req)
                         str_cat(&scriptName, NameScript);
                         if (scriptName.err == 0)
                         {
-                            req->scriptName = Str(&scriptName);
+                            req->scriptName = str_ptr(&scriptName);
                             if (!strcmp(conf->UsePHP, "php-fpm"))
                             {
                                 req->scriptType = php_fpm;
@@ -408,46 +413,58 @@ int response2(Connect *req)
             return read_dir(req);
         }
     }
+
+    if (req->reqMethod == M_POST)
+        return -RS405;
     //----------------------- send file --------------------------------
-    req->fileSize = file_size(Str(req->path));
+    req->fileSize = file_size(str_ptr(req->path));
     req->numPart = 0;
-    req->respContentType = content_type(Str(req->path));
+    req->respContentType = content_type(str_ptr(req->path));
 
     if (req->iRange >= 0)
     {
-        req->numPart = get_ranges(req);
-        if (req->numPart > 1)
+        int ret = get_ranges(req);
+        if (ret < 0)
         {
-            if (req->reqMethod == M_HEAD)
-                return -RS405;
-            req->respStatus = RS206;
+            return ret;
         }
-        else if (req->numPart == 1)
+        
+        req->respStatus = RS206;
+        if (req->numPart == 1)
         {
-            req->respStatus = RS206;
             req->offset = req->rangeBytes[0].start;
-            req->respContentLength = req->rangeBytes[0].part_len;
+            req->respContentLength = req->rangeBytes[0].len;
+            if (req->reqMethod == M_HEAD)
+            {
+                if (send_response_headers(req, NULL))
+                    return -1;
+                return 0;
+            }
         }
-        else
-        {
-            return -RS416;
-        }
+        else if (req->numPart == 0)
+            return -RS500;
     }
     else
     {
         req->respStatus = RS200;
         req->offset = 0;
         req->respContentLength = req->fileSize;
+        if (req->reqMethod == M_HEAD)
+        {
+            if (send_response_headers(req, NULL))
+                return -1;
+            return 0;
+        }
     }
-    
-    req->fd = open(Str(req->path), O_RDONLY);
+
+    req->fd = open(str_ptr(req->path), O_RDONLY);
     if (req->fd == -1)
     {
         if (errno == EACCES)
             return -RS403;
         else if (errno == EMFILE)
         {
-            print_err("<%s:%d> Error open(%s)\n", __func__, __LINE__, Str(req->path));
+            print_err("<%s:%d> Error open(%s)\n", __func__, __LINE__, str_ptr(req->path));
             return -1;
         }
         else
@@ -496,34 +513,35 @@ int response2(Connect *req)
 //======================================================================
 int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
 {
-    int n;
-    long long send_all_bytes, len;
+    int n, i;
+    long long send_all_bytes = 0, len;
     char buf[1024];
-    
-    long long all_bytes = 0;
-    int i;
-    struct Range *range;
+    Range *range;
 
-    send_all_bytes = 0;
-    all_bytes = 2;
     for (i = 0; i < req->numPart; i++)
     {
-        all_bytes += (req->rangeBytes[i].part_len + 2);
-        all_bytes += create_multipart_head(req, &req->rangeBytes[i], buf, sizeof(buf));
+        send_all_bytes += (req->rangeBytes[i].len);
+        send_all_bytes += create_multipart_head(req, &req->rangeBytes[i], buf, sizeof(buf));
     }
-    all_bytes += snprintf(buf, sizeof(buf), "--%s--\r\n", boundary);
-    req->respContentLength = all_bytes;
+    send_all_bytes += snprintf(buf, sizeof(buf), "\r\n--%s--\r\n", boundary);
+    req->respContentLength = send_all_bytes;
     
     str_cat(hdrs, "Content-Type: multipart/byteranges; boundary=");
     str_cat_ln(hdrs, boundary);
     
     str_cat(hdrs, "Content-Length: ");
-    str_llint_ln(hdrs, all_bytes);
+    str_llint_ln(hdrs, send_all_bytes);
+    
+    if (hdrs->err)
+        return -1;
     
     if (send_response_headers(req, hdrs))
-    {
         return -1;
-    }
+    
+    if (req->reqMethod == M_HEAD)
+        return 0;
+    
+    send_all_bytes = 0;
     
     for (i = 0; i < req->numPart; i++)
     {
@@ -537,47 +555,39 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
         n = write_timeout(req->clientSocket, buf, strlen(buf), conf->TimeOut);
         if (n < 0)
         {
-            print_err("<%s:%d> Error: Sent %lld bytes from %lld bytes\n", __func__, __LINE__, send_all_bytes, all_bytes);
+            print_err("<%s:%d> Error: Sent %lld bytes\n", __func__, __LINE__, send_all_bytes);
             return -1;
         }
 
-        len = range->part_len;
-        n = send_file_ux(req->clientSocket, req->fd, rd_buf, size_buf, range->start, &range->part_len);
+        len = range->len;
+        n = send_file_ux(req->clientSocket, req->fd, rd_buf, size_buf, range->start, &range->len);
         if (n < 0)
         {
-            print_err("<%s:%d> Error: Sent %lld bytes from %lld bytes\n", __func__, __LINE__, 
-                    send_all_bytes += (len - range->part_len), all_bytes);
+            print_err("<%s:%d> Error: Sent %lld bytes\n", __func__, __LINE__, 
+                    send_all_bytes += (len - range->len));
             return -1;
         }
         else
-            send_all_bytes += (len - range->part_len);
-
-        snprintf(buf, sizeof(buf), "%s", "\r\n");
-        n = write_timeout(req->clientSocket, buf, 2, conf->TimeOut);
-        if (n < 0)
-        {
-            print_err("<%s:%d> Error: Sent %lld bytes from %lld bytes\n", __func__, __LINE__, send_all_bytes, all_bytes);
-            return -1;
-        }
+            send_all_bytes += (len - range->len);
     }
 
-    snprintf(buf, sizeof(buf), "--%s--\r\n", boundary);
+    snprintf(buf, sizeof(buf), "\r\n--%s--\r\n", boundary);
     n = write_timeout(req->clientSocket, buf, strlen(buf), conf->TimeOut);
-    req->send_bytes = send_all_bytes;
+    req->send_bytes = send_all_bytes + n;
     if (n < 0)
     {
-        print_err("<%s:%d> Error: Sent %lld bytes from %lld bytes\n", __func__, __LINE__, send_all_bytes, all_bytes);
+        print_err("<%s:%d> Error: Sent %lld bytes\n", __func__, __LINE__, send_all_bytes);
         return -1;
     }
 
     return 0;
 }
 //======================================================================
-int create_multipart_head(Connect *req, struct Range *ranges, char *buf, int len_buf)
+int create_multipart_head(Connect *req, Range *ranges, char *buf, int len_buf)
 {
     int n, all = 0;
     
-    n = snprintf(buf, len_buf, "--%s\r\n", boundary);
+    n = snprintf(buf, len_buf, "\r\n--%s\r\n", boundary);
     buf += n;
     len_buf -= n;
     all += n;
@@ -596,7 +606,7 @@ int create_multipart_head(Connect *req, struct Range *ranges, char *buf, int len
     {
         n = snprintf(buf, len_buf,
             "Content-Range: bytes %lld-%lld/%lld\r\n\r\n",
-             ranges->start, ranges->stop, req->fileSize);
+             ranges->start, ranges->end, req->fileSize);
         buf += n;
         len_buf -= n;
         all += n;

@@ -64,7 +64,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
 
     req->respStatus = RS200;
     req->numPart = 0;
-    
+
     if (chunk == SEND_CHUNK)
     {
         str_cat(hdrs, "Transfer-Encoding: chunked\r\n");
@@ -72,7 +72,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
 
     str_cat(hdrs, "Content-Type: text/html\r\n");
     req->respContentLength = -1;
-    
+
     if (chunk)
     {
         if (send_response_headers(req, hdrs))
@@ -107,7 +107,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
         "</h3>\n"
         "  <table cols=\"2\" width=\"100\%\">\n"
         "   <tr><td><h3>Directories</h3></td><td></td></tr>\n");
-    
+
     if (chk.err)
     {
         print_err("<%s:%d> Error va_chunk_add_str()\n", __func__, __LINE__);
@@ -133,8 +133,8 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
             print__err(req, "<%s:%d> Error: Buffer Overflow: %s\n", __func__, __LINE__, list[i]);
             continue;
         }
-        
-        int n = lstat(Str(req->path), &st);
+
+        int n = lstat(str_ptr(req->path), &st);
         str_resize(req->path, len_path);
         if ((n == -1) || !S_ISDIR (st.st_mode))
             continue;
@@ -170,12 +170,12 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
             print_err("<%s:%d> Error: Buffer Overflow: %s\n", __func__, __LINE__, list[i]);
             continue;
         }
-            
-        int n = lstat(Str(req->path), &st);
+
+        int n = lstat(str_ptr(req->path), &st);
         str_resize(req->path, len_path);
         if ((n == -1) || (!S_ISREG (st.st_mode)))
             continue;
-        
+
         if (!encode(list[i], buf, sizeof(buf)))
         {
             print__err(req, "<%s:%d> Error: encode()\n", __func__, __LINE__);
@@ -192,7 +192,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
                                                 list[i], "</td><td align=\"right\">");
                 chunk_add_longlong(&chk, size);
                 va_chunk_add_str(&chk, 1, " bytes</td></tr>\n   <tr><td></td><td></td></tr>\n");
-                
+
                 if (chk.err)
                 {
                     print_err("<%s:%d> Error chunk_add_str()\n", __func__, __LINE__);
@@ -212,7 +212,6 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
                     return -1;
                 }
             }
-            
         }
         else if (isaudiofile(list[i]) && (conf->ShowMediaFiles == 'y'))
         {
@@ -262,7 +261,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
         print_err("<%s:%d> Error va_chunk_add_str()\n", __func__, __LINE__);
         return -1;
     }
-    
+
     chunk_end(&chk);
     req->respContentLength = chk.allSend;
     if (chk.err)
@@ -270,7 +269,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
         print_err("<%s:%d> Error chunk_add_str()\n", __func__, __LINE__);
         return -1;
     }
-    
+
     if (chunk == NO_SEND)
     {
         if (send_response_headers(req, hdrs))
@@ -293,18 +292,21 @@ int read_dir(Connect *req)
     char *list[maxNumFiles];
     int ret;
 
-    dir = opendir(Str(req->path));
+    if (req->reqMethod == M_POST)
+        return -RS405;
+
+    dir = opendir(str_ptr(req->path));
     if (dir == NULL)
     {  
         if (errno == EACCES)
             return -RS403;
         else
         {
-            print__err(req, "<%s:%d> Error opendir(\"%s\"): %s\n", __func__, __LINE__, Str(req->path), str_err(errno));
+            print__err(req, "<%s:%d> Error opendir(\"%s\"): %s\n", __func__, __LINE__, str_ptr(req->path), str_err(errno));
             return -RS500;
         }
     }
-    
+
     while ((dirbuf = readdir(dir)))
     {        
         if (numFiles >= maxNumFiles )
@@ -312,7 +314,7 @@ int read_dir(Connect *req)
             print__err(req, "<%s:%d> number of files per directory >= %d\n", __func__, __LINE__, numFiles);
             break;
         }
-        
+
         if (dirbuf->d_name[0] == '.')
             continue;
         list[numFiles] = dirbuf->d_name;

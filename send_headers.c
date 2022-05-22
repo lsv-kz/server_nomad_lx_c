@@ -16,33 +16,30 @@ void create_response_headers(Connect *req, String *hd, String *hdrs)
     get_time(time_resp, sizeof(time_resp));
 
     response_status(hd, get_str_http_prot(req->httpProt), status_resp(req->respStatus));
-    
+
     str_cat(hd, "Date: ");
     str_cat_ln(hd, time_resp);
-    
+
     str_cat(hd, "Server: ");
     str_cat_ln(hd, conf->ServerSoftware);
 
     if(req->reqMethod == M_OPTIONS)
-    {
         str_cat(hd, "Allow: OPTIONS, GET, HEAD, POST\r\n");
-    }
-    else
-    {
-        str_cat(hd, "Accept-Ranges: bytes\r\n");
-    }
 
     if (req->numPart == 1)
     {
+        str_cat(hd, "Content-Type: ");
+        str_cat_ln(hd, req->respContentType);
+        
+        str_cat(hd, "Content-Length: ");
+        str_llint_ln(hd, req->respContentLength);
+        
         str_cat(hd, "Content-Range: bytes ");
         str_llint(hd, req->offset);
         str_cat(hd, "-");
         str_llint(hd, req->offset + req->respContentLength - 1);
         str_cat(hd, "/");
         str_llint_ln(hd, req->fileSize);
-
-        str_cat(hd, "Content-Length: ");
-        str_llint_ln(hd, req->respContentLength);
     }
     else if (req->numPart == 0)
     {
@@ -55,10 +52,19 @@ void create_response_headers(Connect *req, String *hd, String *hdrs)
         {
             str_cat(hd, "Content-Length: ");
             str_llint_ln(hd, req->respContentLength);
+            
+            if (req->respStatus == RS200)
+                str_cat(hd, "Accept-Ranges: bytes\r\n");
+        }
+
+        if (req->respStatus == RS416)
+        {
+            str_cat(hd, "Content-Range: bytes */");
+            str_llint_ln(hd, req->fileSize);
         }
     }
 
-    if(req->respStatus == RS101)
+    if (req->respStatus == RS101)
     {
         str_cat(hd, "Upgrade: HTTP/1.1\r\n"
                     "Connection: Upgrade\r\n");
@@ -73,21 +79,18 @@ void create_response_headers(Connect *req, String *hd, String *hdrs)
     //------------------------------------------------------------------
     if (hdrs)
     {
-        str_cat(hd, Str(hdrs));
+        str_cat(hd, str_ptr(hdrs));
     }
 
-    if(req->numPart  > 1)
-        str_cat(hd, "\r\n\r\n");
-    else
-        str_cat(hd,  "\r\n");
-    
+    str_cat(hd,  "\r\n");
+
     if (hd->err)
     {
         print_err("<%s:%d> Error create response headers: %d\n", __func__, __LINE__, hd->err);
         return;
     }
 
-    int n = write_timeout(req->clientSocket, Str(hd), str_len(hd), conf->TimeOut);
+    int n = write_timeout(req->clientSocket, str_ptr(hd), str_len(hd), conf->TimeOut);
     if(n <= 0)
     {
         print_err("<%s:%d> Sent to client response error; (%d)\n", __func__, __LINE__, n);
@@ -98,11 +101,6 @@ void create_response_headers(Connect *req, String *hd, String *hdrs)
 //======================================================================
 int send_response_headers(Connect *req, String *hdrs)
 {
-    if(req->httpProt == HTTP09)
-        return 1;   
-    else if((req->httpProt == HTTP2) || (req->httpProt == 0))
-        req->httpProt = HTTP11;
-    
     String hd = str_init(768);
     if (hd.err == 0)
     {
@@ -176,7 +174,7 @@ void send_message(Connect *req, String *hdrs, const char *msg)
             }
             else
             {
-                req->send_bytes = write_timeout(req->clientSocket, Str(&html), req->respContentLength, conf->TimeOut);
+                req->send_bytes = write_timeout(req->clientSocket, str_ptr(&html), req->respContentLength, conf->TimeOut);
                 if(req->send_bytes <= 0)
                 {
                     print_err("<%s:%d> Error write_timeout()\n", __func__, __LINE__);

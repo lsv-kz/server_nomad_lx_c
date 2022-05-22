@@ -18,6 +18,11 @@ int get_num_cgi();
 
 static int nProc;
 //======================================================================
+int get_num_chld(void)
+{
+    return nProc;
+}
+//======================================================================
 int get_num_thr(void)
 {
 pthread_mutex_lock(&mtx_thr);
@@ -76,7 +81,7 @@ pthread_mutex_lock(&mtx_thr);
     }
     else
         list_start = list_end = req;
-    
+
     ++size_list;
 pthread_mutex_unlock(&mtx_thr);
     pthread_cond_signal(&cond_list);
@@ -113,7 +118,7 @@ pthread_mutex_lock(&mtx_thr);
     {
         pthread_cond_wait(&cond_new_thr, &mtx_thr);
     }
-    
+
     *n = count_thr;
 pthread_mutex_unlock(&mtx_thr);
     return stop_manager;
@@ -172,7 +177,7 @@ void end_response(Connect *req)
             int optval = 0;
             setsockopt(req->clientSocket, SOL_TCP, TCP_CORK, &optval, sizeof(optval));
         }
-        
+
         print_log(req);
         req->timeout = conf->TimeoutKeepAlive;
         ++req->numReq;
@@ -201,7 +206,6 @@ int create_thread(int *num_proc)
     n = pthread_create(&thr, NULL, thread_client, num_proc);
     if (n)
     {
-        // errno = 12; n = 11
         print_err("<%s> Error pthread_create(): %d\n", __func__, n);
         return n;
     }
@@ -270,35 +274,35 @@ int manager(int sockServer, int numProc, int to_parent)
     int par[3];
     char nameSock[32];
     snprintf(nameSock, sizeof(nameSock), "unix_sock_%d", numProc);
-    
+
     if (remove(nameSock) == -1 && errno != ENOENT)
     {
         print_err("[%n]<%s:%d> Error remove(%s): %s\n", numProc, __func__, __LINE__, nameSock, strerror(errno));
         exit(1);
     }
-    
+
     int unixSock = unixBind(nameSock, SOCK_DGRAM);
     if (unixSock == -1)
     {
         print_err("[%u]<%s:%d> Error unixBind()=%d\n", numProc, __func__, __LINE__, unixSock);
         exit(1);
     }
-    
+
     uxSock = unixSock;
 
     fd_close_conn = to_parent;
     nProc = numProc;
     servSock = sockServer;
-    
+
     signal(SIGUSR1, SIG_IGN);
     signal(SIGUSR2, SIG_IGN);
-    
+
     if (signal(SIGINT, signal_handler) == SIG_ERR)
     {
         print_err("<%s:%d> Error signal(SIGINT): %s\n", __func__, __LINE__, strerror(errno));
         exit(EXIT_FAILURE);
     }
-    
+
     if (signal(SIGSEGV, signal_handler) == SIG_ERR)
     {
         print_err("<%s:%d> Error signal(SIGSEGV): %s\n", __func__, __LINE__, strerror(errno));
@@ -321,13 +325,13 @@ int manager(int sockServer, int numProc, int to_parent)
         }
         num_thr = start_thr();
     }
-    
+
     if (get_num_thr() > conf->MinThreads)
     {
         print_err("[%d:%s:%d] Error num threads=%d\n", numProc, __func__, __LINE__, get_num_thr());
         exit(1);
     }
-    
+
     printf("[%d:%s:%d] +++++ num threads=%d, pid=%d, uid=%d, gid=%d +++++\n", numProc, __func__, 
                                 __LINE__, get_num_thr(), getpid(), getuid(), getgid());
     all_thr = num_thr;
@@ -351,7 +355,7 @@ int manager(int sockServer, int numProc, int to_parent)
     {
         struct sockaddr_storage clientAddr;
         socklen_t addrSize = sizeof(struct sockaddr_storage);
-        
+
         int clientSocket = recv_fd(unixSock, numProc, &clientAddr, addrSize);
         if (clientSocket < 0)
         {
@@ -367,10 +371,10 @@ int manager(int sockServer, int numProc, int to_parent)
             close(clientSocket);
             break;
         }
-        
+
         int opt = 1;
         ioctl(clientSocket, FIONBIO, &opt);
-        
+
         req->numProc = numProc;
         req->numConn = allConn++;
         req->numReq = 0;
@@ -389,13 +393,13 @@ int manager(int sockServer, int numProc, int to_parent)
         start_conn();
         push_pollin_list(req);
     }
-    
+
     print_err("<%d> thr=%d, allThr=%d, open_conn=%d, allConn=%d\n", numProc, count_thr, all_thr, count_conn, allConn);
     i = count_thr;
-    
+
     close_manager();
     pthread_join(thr_man, NULL);
-    
+
     close_event_handler();
     pthread_join(thr_handler, NULL);
 
@@ -407,7 +411,7 @@ int manager(int sockServer, int numProc, int to_parent)
 Connect *create_req(void)
 {
     Connect *req = NULL;
-    
+
     req = malloc(sizeof(Connect));
     if (!req)
         print_err("<%s:%d> Error malloc(): %s(%d)\n", __func__, __LINE__, str_err(errno), errno);

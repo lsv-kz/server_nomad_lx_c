@@ -229,7 +229,7 @@ pthread_mutex_unlock(&mtx_);
         else
         {
             if (n_snd == 0)
-                r->first_snd = 1; // set "first_snd"
+                r->first_snd = 1;
             
             if (r->sock_timer == 0)
                 r->sock_timer = t;
@@ -248,7 +248,7 @@ pthread_mutex_unlock(&mtx_);
     }
     
     if (pNext)
-        pNext->first_snd = 0; // reset "first_snd"
+        pNext->first_snd = 0;
     
     if (count_ < 10)
         ++count_;
@@ -376,7 +376,7 @@ pthread_mutex_unlock(&mtx_);
             {
                 --ret;
                 print__err(r, "<%s:%d> Error: revents=0x%x\n", __func__, __LINE__, fdwr[i].revents);
-                r->err = -1;
+                r->err = NO_PRINT_LOG;
                 
                 del_from_list(r);
                 end_response(r);

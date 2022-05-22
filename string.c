@@ -33,7 +33,7 @@ void str_free(String *s)
     s->size = s->len = s->err = 0;
 }
 //======================================================================
-void reserve(String *s, unsigned int n)
+static void reserve(String *s, unsigned int n)
 {
     if ((n <= s->size) || s->err)
     {
@@ -163,7 +163,7 @@ void str_llint_ln(String *s, long long ll)
     str_cat_ln(s, buf);
 }
 //======================================================================
-const char *Str(String *s)
+const char *str_ptr(String *s)
 {
     if (s->err || (!s->ptr)) return "";
     *(s->ptr + s->len) = 0;

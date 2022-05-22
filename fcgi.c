@@ -639,7 +639,7 @@ int send_param(Connect *req, int fcgi_sock)
     add_param(&par, "SCRIPT_NAME", req->decodeUri);
     
     if (req->scriptType == php_fpm)
-        add_param(&par, "SCRIPT_FILENAME", Str(req->path));
+        add_param(&par, "SCRIPT_FILENAME", str_ptr(req->path));
     
     if(req->reqMethod == M_POST)
     {

@@ -388,7 +388,7 @@ int send_fd(int unix_sock, int fd, void *data, int size_data)
     struct msghdr msgh;
     struct iovec iov;
     ssize_t ret;
-    char   buf[CMSG_SPACE(sizeof(int))];
+    char buf[CMSG_SPACE(sizeof(int))];
     memset(buf, 0, sizeof(buf));
     
     msgh.msg_name = NULL;
@@ -430,7 +430,7 @@ int recv_fd(int unix_sock, int num_chld, void *data, int size_data)
     struct msghdr msgh;
     struct iovec iov;
     ssize_t nr;
-    char   buf[CMSG_SPACE(sizeof(int))];
+    char buf[CMSG_SPACE(sizeof(int))];
     
     msgh.msg_name = NULL;
     msgh.msg_namelen = 0;

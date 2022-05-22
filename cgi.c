@@ -13,7 +13,7 @@ int timedwait_close_cgi(void)
 {
     int ret = 0;
 pthread_mutex_lock(&mtx_chld);
-    while (num_chlds >= conf->MaxChldsCgi)
+    while (num_chlds >= conf->MaxProcCgi)
     {
         struct timeval now;
         struct timespec ts;
@@ -281,12 +281,12 @@ int cgi_fork(Connect *req)
             str_cat(req->path, conf->cgiDir);
             str_cat(req->path, cgi_script_file(req->scriptName));
         case php_cgi:
-            if (Str(req->path)[str_len(req->path)] == '/')
+            if (str_ptr(req->path)[str_len(req->path)] == '/')
                 str_resize(req->path, str_len(req->path) - 1);
             
-            if(stat(Str(req->path), &st) == -1)
+            if(stat(str_ptr(req->path), &st) == -1)
             {
-                print__err(req, "<%s:%d> script (%s) not found\n", __func__, __LINE__, Str(req->path));
+                print__err(req, "<%s:%d> script (%s) not found\n", __func__, __LINE__, str_ptr(req->path));
                 return -RS404;
             }
             break;
@@ -362,7 +362,7 @@ int cgi_fork(Connect *req)
         if(req->iUserAgent >= 0)
             setenv("HTTP_USER_AGENT", req->reqHeadersValue[req->iUserAgent], 1);
         setenv("SCRIPT_NAME", req->scriptName, 1);
-        setenv("SCRIPT_FILENAME", Str(req->path), 1);
+        setenv("SCRIPT_FILENAME", str_ptr(req->path), 1);
         if(req->reqMethod == M_POST)
         {
             if(req->iReqContentType >= 0)
@@ -375,7 +375,7 @@ int cgi_fork(Connect *req)
 
         if(req->scriptType == cgi_ex)
         {
-            execl(Str(req->path), base_name(req->scriptName), NULL);
+            execl(str_ptr(req->path), base_name(req->scriptName), NULL);
         }
         else if(req->scriptType == php_cgi)
         {

@@ -40,9 +40,9 @@
 #define     MAX_HEADERS          25
 #define     NO_PRINT_LOG      -1000
 
-typedef struct fcgi_list_addr{
-    char scrpt_name[MAX_NAME];
-    char addr[MAX_NAME];
+typedef struct fcgi_list_addr {
+    char *scrpt_name;
+    char *addr;
     struct fcgi_list_addr *next;
 } fcgi_list_addr;
 
@@ -73,35 +73,35 @@ typedef struct {
     char *ptr;
 } String;
 //----------------------------------------------------------------------
-struct Range {
+typedef struct {
     long long start;
-    long long stop;
-    long long part_len;
-};
+    long long end;
+    long long len;
+} Range;
 //======================================================================
 struct Config
 {
     char host[128];
     char servPort[16];
     char ServerSoftware[48];
-    
+
     char tcp_cork;
 
     char TcpNoDelay;
 
-    int NumChld;
+    int NumProc;
     int MaxThreads;
     int MinThreads;
     int MaxRequestsPerThr;
 
     int SNDBUF_SIZE;
-    
+
     char SEND_FILE;
-    
+
     int MAX_SND_FD;
     int TIMEOUT_POLL;
-    
-    int MaxChldsCgi;
+
+    int MaxProcCgi;
 
     int ListenBacklog;
 
@@ -111,7 +111,9 @@ struct Config
     int TimeoutKeepAlive;
     int TimeOut;
     int TimeoutCGI;
-    
+
+    int MaxRanges;
+
     char rootDir[MAX_PATH];
     char cgiDir[MAX_PATH];
     char logDir[MAX_PATH];
@@ -202,24 +204,26 @@ typedef struct Connect{
     char      *reqHeadersName[MAX_HEADERS + 1];
     char      *reqHeadersValue[MAX_HEADERS + 1];
     
-    const char      *scriptName;
+    const char  *scriptName;
     String    *path;
-    struct Range *rangeBytes;
-    
     int       sizePath;
     
     int       scriptType;
     int       respStatus;
     char      sLogTime[64];
-    long long respContentLength;
+    
     long long fileSize;
+    long long respContentLength;
     const char  *respContentType;
+    
     int       countRespHeaders;
+    
+    Range     *rangeBytes;
+    int       numPart;
     
     int       fd;
     off_t     offset;
     long long send_bytes;
-    int       numPart;
 } Connect;
 //----------------------------------------------------------------------
 #define   CHUNK_SIZE_BUF   4096
@@ -247,7 +251,7 @@ int unixBind(const char *path, int type);
 int unixConnect(const char *path);
 //----------------------------------------------------------------------
 int encode(const char *s_in, char *s_out, int len_out);
-int decode(char *s_in, int len_in, char *s_out, int len_out);
+int decode(const char *s_in, int len_in, char *s_out, int len_out);
 //----------------------------------------------------------------------
 int read_timeout(int fd, char *buf, int len, int timeout);
 int write_timeout(int sock, const char *buf, int len, int timeout);
@@ -323,7 +327,7 @@ void str_cat(String *s, const char *cs);
 void str_cat_ln(String *s, const char *cs);
 void str_llint(String *s, long long ll);
 void str_llint_ln(String *s, long long ll);
-const char *Str(String *s);
+const char *str_ptr(String *s);
 int str_len(String *s);
 //----------------------------------------------------------------------
 void free_fcgi_list();

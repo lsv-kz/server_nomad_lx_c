@@ -1,257 +1,208 @@
 #include "server.h"
 
-enum {DIGIT = 1, DASH};
 //======================================================================
 int check_ranges(Connect *req)
 {
-    int size = req->numPart;
-    struct Range *r = req->rangeBytes;
+    int Len = req->numPart;
+    Range *r = req->rangeBytes;
 
-    for (int i = 0; i < size; i++)
+    for ( int n = Len - 1; n > 0; n--)
     {
-        if (r[i].part_len == 0)
-                continue;
-
-        for (int n = 0; n < size; n++)
+        for (int i = n - 1; i >= 0; i--)
         {
-            if (i == n)
-                continue;
-
-            if (r[n].part_len == 0)
-                continue;
-
-            if (r[i].start >= r[n].start)
+            if (((r[n].end + 1) >= r[i].start) && ((r[i].end + 1) >= r[n].start))
             {
-                if (r[i].start <= (r[n].stop + 1))
-                {
-                    if (r[i].stop > r[n].stop)
-                    {
-                        r[n].stop = r[i].stop;
-                        r[n].part_len = r[n].stop - r[n].start + 1;
-                        r[i].part_len = 0;
-                    }
-                    else
-                    {
-                        r[i].part_len = 0;
-                    }
-                    break;
-                }
+                if (r[n].start < r[i].start)
+                    r[i].start = r[n].start;
+
+                if (r[n].end > r[i].end)
+                    r[i].end = r[n].end;
+
+                r[i].len = r[i].end - r[i].start + 1;
+                r[n].len = 0;
+
+                n--;
+                req->numPart--;
             }
         }
     }
-
-    int numPart = 0;
-    for (int i = 0; i < size; i++)
-    {
-        if (r[i].part_len)
-            numPart++;
-    }
-
-    if (numPart == size)
-        return numPart;
-
-    for (int i = 0; i < numPart; )
-    {
-        for ( ; i < numPart; i++)
-        {
-            if (r[i].part_len == 0)
-                break;
-        }
     
-        for (int n = i + 1; (n < size) && (i < numPart); )
+    for (int i = 0, j = 0; j < Len; j++)
+    {
+        if (r[j].len)
         {
-            if (r[n].part_len != 0)
+            if (i < j)
             {
-                r[i].start = r[n].start;
-                r[i].stop = r[n].stop;
-                r[i].part_len = r[n].part_len;
-                r[n].part_len = 0;
-
-                break;
+                r[i].start = r[j].start;
+                r[i].end = r[j].end;
+                r[i].len = r[j].len;
+                r[j].len = 0;
             }
-            else
-                n++;
+            
+            i++;
         }
-        i++;
     }
     
-    req->numPart = numPart;
-    return numPart;
+    return req->numPart;
 }
 //======================================================================
-int parse_ranges(Connect *req)
+int parse_ranges(Connect *req, int Len)
 {
-    if (!req->sRange) return -RS416;
-    int countStructs, len = strlen(req->sRange);
-    long long start, stop, size = req->fileSize;
-
+    long long start = 0, end = 0, size = req->fileSize, ll;
+    int i = 0;
+    const char *p1;
+    char *p2;
+    
     req->numPart = 0;
     
-    int inputIndex = 0;
-    for (int ch; (ch = *(req->sRange + inputIndex)); inputIndex++)
-    {
-        if ((ch != ' ') && (ch != '\t'))
-            break;
-    }
+    p1 = p2 = req->sRange;
     
-    countStructs = 0;
-    int minus = 0, blank = 0, num = 0;
-    int i = inputIndex;
-    while (1)
+    for ( ; req->numPart < Len; )
     {
-        int ch = *(req->sRange + i);
-        if ((ch == '-') && !blank)
+        if ((*p1 >= '0') && (*p1 <= '9'))
         {
-            if (minus > 0)
-                break;
-            minus++;
-        }
-        else if (((ch >= '0') && (ch <= '9')) && !blank)
-        {
-            if (!num)
-                num = 1;
-        }
-        else if ((ch == '\0') || (ch == '\n') || (ch == '\r'))
-        {
-            if (minus && num)
-                countStructs++;
-            break;
-        }
-        else if ((ch == ' ') || (ch == '\t'))
-        {
-            if (!blank)
-                blank = 1;
-        }
-        else if ((ch == ',') && !blank)
-        {
-            if (!minus || !num)
-                break;
-            countStructs++;
-            minus = blank = num = 0;
-        }
-        else
-        {
-            break;
-        }
-        
-        i++;
-        if (i >= len)
-        {
-            if (minus && num)
+            ll = strtoll(p1, &p2, 10);
+            if (p1 < p2)
             {
-                countStructs++;
+                if (i == 0)
+                    start = ll;
+                else if (i == 2)
+                    end = ll;
+                else
+                {
+                    fprintf(stderr, "<%s:%d> \"416 Requested Range Not Satisfiable\"\n", __func__, __LINE__);
+                    return -416;
+                }
+                            
+                i++;
+                p1 = p2;
             }
-            break;
         }
-    }
-
-    req->rangeBytes = malloc(sizeof(struct Range) * countStructs);
-    if (!req->rangeBytes)
-        return req->numPart;
-
-    char sStart[16], sStop[16], *ptrStr;
-    for (; (inputIndex < len) && (req->numPart < countStructs); )
-    {
-        int firstChar = 0;
-        minus = blank = num = 0;
-        ptrStr = sStart;
-        for (int outputIndex = 0; outputIndex < 16; inputIndex++)
+        else if (*p1 == ' ')
+            p1++;
+        else if (*p1 == '-')
         {
-            int ch = *(req->sRange + inputIndex);
-            if ((ch == '-') && !blank)
+            if (i == 0)
             {
-                if (minus > 0)
-                    return req->numPart;
-                if (!firstChar)
-                    firstChar = DASH;
-                minus++;
-                ptrStr = sStop;
-                outputIndex = 0;
+                ll = strtoll(p1, &p2, 10);
+                if (ll < 0)
+                {
+                    start = size + ll;
+                    end = size - 1;
+                    i = 3;
+                    p1 = p2;
+                }
+                else
+                {
+                    fprintf(stderr, "<%s:%d> \"416 Requested Range Not Satisfiable\"\n", __func__, __LINE__);
+                    return -416;
+                }
             }
-            else if (((ch >= '0') && (ch <= '9')) && !blank)
+            else if (i == 2)
             {
-                if (!firstChar)
-                    firstChar = DIGIT;
-                if (outputIndex == 0)
-                    num++;
-
-                ptrStr[outputIndex++] = ch;
-                ptrStr[outputIndex] = 0;
-            }
-            else if ((ch == '\0') || (ch == '\n') || (ch == '\r'))
-                break;
-            else if ((ch == ' ') || (ch == '\t'))
-            {
-                if (!blank)
-                    blank = 1;
-                
-                continue;
-            }
-            else if ((ch == ',') && !blank)
-            {
-                inputIndex++;           
-                break;
+                fprintf(stderr, "<%s:%d> \"416 Requested Range Not Satisfiable\"\n", __func__, __LINE__);
+                return -416;
             }
             else
-                return req->numPart;
+            {
+                p1++;
+                i++;
+            }
         }
+        else if (*p1 == ',')
+        {
+            if (i == 2)
+                end = size - 1;
+            else if (i != 3)
+            {
+                fprintf(stderr, "<%s:%d> \"416 Requested Range Not Satisfiable\"\n", __func__, __LINE__);
+                return -416;
+            }
 
-        if (!minus || !num || (num > 2))
-        {
-            if (req->numPart > 0) return req->numPart;
-            else return -RS416;
+            if (end >= size)
+                end = size - 1;
+            
+            if (start <= end)// 
+            {
+                req->rangeBytes[req->numPart++] = (Range){start, end, end - start + 1};
+                //printf("   <%d> [%lld-%lld/%lld]\n", __LINE__, start, end, end - start + 1);
+            }
+            
+            start = end = 0;
+            p1++;
+            i = 0;
         }
-        else if (num == 1 && firstChar == DASH)
+        else if (*p1 == 0)
         {
-            sscanf(sStop, "%lld", &stop);
-            start = size - stop;
-            stop = size - 1;
-        }
-        else if (num == 1 && firstChar == DIGIT)
-        {
-            sscanf(sStart, "%lld", &start);
-            stop = size - 1;
-        }
-        else if (num == 2  && firstChar == DIGIT)
-        {
-            sscanf(sStart, "%lld", &start);
-            sscanf(sStop, "%lld", &stop);
+            if (i == 2)
+                end = size - 1;
+            else if (i != 3)
+            {
+                fprintf(stderr, "<%s:%d> \"416 Requested Range Not Satisfiable\"\n", __func__, __LINE__);
+                return -416;
+            }
+
+            if (end >= size)
+                end = size - 1;
+            
+            if (start <= end)
+            {
+                req->rangeBytes[req->numPart++] = (Range){start, end, end - start + 1};
+                //printf("   <%d> [%lld-%lld/%lld]\n", __LINE__, start, end, end - start + 1);
+            }
+
+            start = end = 0;
+            break;
         }
         else
-            return req->numPart;
-
-        if ((start > stop) || (start >= size) || (stop >= size) || (start < 0))
         {
-            if (req->numPart > 0) return req->numPart;
-            else return -RS416;
+            fprintf(stderr, "<%s:%d> \"416 Requested Range Not Satisfiable\"\n", __func__, __LINE__);
+            return -416;
         }
-        
-        struct Range r = {start, stop, stop - start + 1};
-        req->rangeBytes[req->numPart++] = r;
     }
+    
     return req->numPart;
 }
 //======================================================================
 int get_ranges(Connect *req)
 {
-    int n = parse_ranges(req);
-    if (n > 1)
+    int SizeArray = 0;
+    
+    if (!req->sRange)
     {
-        return (n = check_ranges(req));
+        return -RS500;
     }
-    else if (n == 1)
+    
+    if (conf->MaxRanges == 0)
     {
-        req->offset = req->rangeBytes[0].start;
-        req->respContentLength = req->rangeBytes[0].part_len;
+        return -RS403;
     }
-        
+    
+    for ( char *p = req->sRange; *p; ++p)
+    {
+        if (*p == ',')
+            SizeArray++;
+    }
+    
+    SizeArray++;
+    if (SizeArray > conf->MaxRanges)
+        SizeArray = conf->MaxRanges;
+    req->rangeBytes = malloc(sizeof(Range) * SizeArray);
+    if (!req->rangeBytes)
+    {
+        return -RS500;
+    }
+    
+    int n = parse_ranges(req, SizeArray);
+    //if (n > 1)
+    //    return (n = check_ranges(req));
     return n;
 }
 //======================================================================
 void free_range(Connect *r)
 {
     r->numPart = 0;
-    if(r->rangeBytes)
+    if (r->rangeBytes)
     {
         free(r->rangeBytes);
         r->rangeBytes = NULL;
