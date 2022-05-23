@@ -199,7 +199,7 @@ int getLine(FILE *f, char *s, int size)
     if (ch == EOF)
     {
         if (n)
-            return n;
+            return rstrip(s, n);
         else
             return -1;
     }
@@ -207,24 +207,29 @@ int getLine(FILE *f, char *s, int size)
     return -1;
 }
 //======================================================================
-int find_str(FILE *f, const char *s)
+int find_bracket(FILE *f)
 {
-    int ch, i = 0, n = 0, len = strlen(s);
+    int ch, grid = 0;
 
     while (((ch = getc(f)) != EOF))
     {
-        n++;
-        if (ch == *(s + i))
-            i++;
-        else
-            i = 0;
-        if (*(s + i) == 0)
-            return n - len;
+        if (ch == '#')
+            grid = 1;
+        
+        if (ch == '\n')
+            grid = 0;
+        
+        if ((ch == '}') && (grid == 0))
+            return 0;
+        
+        if (ch == '{')
+        {
+            if (grid == 0)
+                return 1;
+        }
     }
 
-    if (*(s + i) == 0)
-        return n - len;
-    return -1;
+    return 0;
 }
 //======================================================================
 int read_conf_file(const char *path_conf)
@@ -246,8 +251,9 @@ int read_conf_file(const char *path_conf)
         exit(1);
     }
 
-    int n;
-    while ((n = getLine(f, ss, sizeof(ss))) >= 0)
+    c.index_html = c.index_php = c.index_pl = c.index_fcgi = 'n';
+
+    while (getLine(f, ss, sizeof(ss)) >= 0)
     {
         if (sscanf(ss, "ServerAddr %127s", c.host) == 1)
             continue;
@@ -313,15 +319,13 @@ int read_conf_file(const char *path_conf)
             continue;
         else if (!strcmp(ss, "index"))
         {
-            if ((n = find_str(f, "{")) < 0)
+            if (find_bracket(f) < 0)
             {
-                fprintf(stderr, "<%s:%d>   Error read config file, n=%d\n", __func__, __LINE__, n);
+                fprintf(stderr, "<%s:%d> Error not found \"{\"\n", __func__, __LINE__);
                 exit(1);
             }
 
-            c.index_html = c.index_php = c.index_pl = c.index_fcgi = 'n';
-
-            while ((n = getLine(f, ss, sizeof(ss))) >= 0)
+            while (getLine(f, ss, sizeof(ss)) >= 0)
             {
                 if (ss[0] == '}')
                     break;
@@ -346,13 +350,13 @@ int read_conf_file(const char *path_conf)
         }
         else if (!strcmp(ss, "fastcgi"))
         {
-            if ((n = find_str(f, "{")) < 0)
+            if (find_bracket(f) < 0)
             {
-                fprintf(stderr, "<%s:%d>   Error read config file, n=%d\n", __func__, __LINE__, n);
+                fprintf(stderr, "<%s:%d> Error not found \"{\"\n", __func__, __LINE__);
                 exit(1);
             }
 
-            while ((n = getLine(f, ss, sizeof(ss))) >= 0)
+            while (getLine(f, ss, sizeof(ss)) >= 0)
             {
                 if (ss[0] == '}')
                     break;
