@@ -115,9 +115,7 @@ int main(int argc, char *argv[])
     signal(SIGPIPE, SIG_IGN);
 
     if (argc == 1)
-    {
         snprintf(conf_dir, sizeof(conf_dir), "%s", "./server.conf");
-    }
     else
     {
         int c;

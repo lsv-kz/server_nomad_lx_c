@@ -194,7 +194,7 @@ int isbool(const char *s)
         return 0;
     if (strlen(s) != 1)
         return 0;
-    return ((s[0] == 'y') || (s[0] == 'n'));
+    return (((char)tolower(s[0]) == 'y') || ((char)tolower(s[0]) == 'n'));
 }
 //======================================================================
 void create_fcgi_list(fcgi_list_addr **l, const char *s1, const char *s2)
@@ -233,15 +233,12 @@ int find_bracket(FILE *f)
     {
         if (ch == '#')
             grid = 1;
-
-        if (ch == '\n')
+        else if (ch == '\n')
             grid = 0;
-
-        if ((ch == '}') && (grid == 0))
-            return 0;
-
-        if ((ch == '{') && (grid == 0))
+        else if ((ch == '{') && (grid == 0))
             return 1;
+        else if ((ch != ' ') && (ch != '\t') && (grid == 0))
+            return 0;
     }
 
     return 0;
@@ -282,13 +279,13 @@ int read_conf_file(const char *path_conf)
             else if (!strcmp(s1, "ServerSoftware"))
                 snprintf(c.ServerSoftware, sizeof(c.ServerSoftware), "%s", s2);
             else if (!strcmp(s1, "tcp_cork") && isbool(s2))
-                sscanf(s2, "%c", &c.tcp_cork);
+                c.tcp_cork = (char)tolower(s2[0]);
             else if (!strcmp(s1, "SndBufSize") && isnumber(s2))
                 sscanf(s2, "%d", &c.SNDBUF_SIZE);
             else if (!strcmp(s1, "SendFile") && isbool(s2))
-                sscanf(s2, "%c", &c.SEND_FILE);
+                c.SEND_FILE = (char)tolower(s2[0]);
             else if (!strcmp(s1, "TcpNoDelay") && isbool(s2))
-                sscanf(s2, "%c", &c.TcpNoDelay);
+                c.TcpNoDelay = (char)tolower(s2[0]);
             else if (!strcmp(s1, "DocumentRoot"))
                 snprintf(c.rootDir, sizeof(c.rootDir), "%s", s2);
             else if (!strcmp(s1, "ScriptPath"))
@@ -314,7 +311,7 @@ int read_conf_file(const char *path_conf)
             else if (!strcmp(s1, "MaxProcCgi") && isnumber(s2))
                 sscanf(s2, "%d", &c.MaxProcCgi);
             else if (!strcmp(s1, "KeepAlive") && isbool(s2))
-                sscanf(s2, "%c", &c.KeepAlive);
+                c.KeepAlive = (char)tolower(s2[0]);
             else if (!strcmp(s1, "TimeoutKeepAlive") && isnumber(s2))
                 sscanf(s2, "%d", &c.TimeoutKeepAlive);
             else if (!strcmp(s1, "TimeOut") && isnumber(s2))
@@ -328,7 +325,7 @@ int read_conf_file(const char *path_conf)
             else if (!strcmp(s1, "PathPHP"))
                 snprintf(c.PathPHP, sizeof(c.PathPHP), "%s", s2);
             else if (!strcmp(s1, "ShowMediaFiles") && isbool(s2))
-                sscanf(s2, "%c", &c.ShowMediaFiles);
+                c.ShowMediaFiles = (char)tolower(s2[0]);
             else if (!strcmp(s1, "Chunked") && isbool(s2))
                 sscanf(s2, "%c", &c.Chunked);
             else if (!strcmp(s1, "ClientMaxBodySize") && isnumber(s2))
