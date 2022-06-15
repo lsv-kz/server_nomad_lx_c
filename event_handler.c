@@ -181,7 +181,10 @@ pthread_mutex_unlock(&mtx_);
         
         if (((t - r->sock_timer) >= r->timeout) && (r->sock_timer != 0))
         {
-            r->err = -1;
+            if (r->reqMethod)
+                r->err = -1;
+            else
+                r->err = NO_PRINT_LOG;
             print__err(r, "<%s:%d> Timeout = %ld\n", __func__, __LINE__, t - r->sock_timer);
             r->iReferer = MAX_HEADERS - 1;
             r->reqHeadersValue[r->iReferer] = "Timeout";

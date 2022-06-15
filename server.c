@@ -7,12 +7,15 @@ static int sockServer;
 
 int create_server_socket(const struct Config *conf);
 int read_conf_file(const char *path_conf);
+void create_logfiles(const char *log_dir, const char * ServerSoftware);
+int set_uid();
 
 static int from_chld[2], unixFD[8];
 static pid_t pidArr[8];
 static int numConn[8];
 static char conf_dir[512];
 static int restart = 0;
+static int run = 0;
 int main_proc();
 //======================================================================
 static void signal_handler(int sig)
@@ -149,8 +152,16 @@ int main(int argc, char *argv[])
             }
         }
 
+        if (conf_dir_)
+            snprintf(conf_dir, sizeof(conf_dir), "%s", conf_dir_);
+        else
+            snprintf(conf_dir, sizeof(conf_dir), "%s", "./server.conf");
+
         if (sig)
         {
+            if (read_conf_file(conf_dir))
+                exit(1);
+
             if (pid_ && (!strcmp(sig, "restart")))
             {
                 if (kill(pid_, SIGUSR1))
@@ -168,20 +179,13 @@ int main(int argc, char *argv[])
             }
             return 0;
         }
-        else if (conf_dir_)
-        {
-            snprintf(conf_dir, sizeof(conf_dir), "%s", conf_dir_);
-        }
-        else
-        {
-            fprintf(stderr, "<%d> ?\n", __LINE__);
-            exit(1);
-        }
     }
 
     while (!restart)
     {
-        main_proc();
+        if (main_proc())
+            break;
+
         if (restart == 1)
             restart = 0;
         else
@@ -195,7 +199,14 @@ int main_proc()
 {
     char s[256];
 
-    read_conf_file(conf_dir);
+    if (read_conf_file(conf_dir))
+        return -1;
+    create_logfiles(conf->logDir, conf->ServerSoftware);
+    if (run == 0)
+    {
+        set_uid();
+        run = 1;
+    }
     //------------------------------------------------------------------
     pid_t pid = getpid();
 
@@ -230,7 +241,6 @@ int main_proc()
                 "   php: %s\n"
                 "   path_php: %s\n"
                 "   ShowMediaFiles = %c\n"
-                "   Chunked = %c\n"
                 "   ClientMaxBodySize = %ld\n\n"
                 "   index.html = %c\n"
                 "   index.php = %c\n"
@@ -241,10 +251,15 @@ int main_proc()
                 conf->SEND_FILE, conf->SNDBUF_SIZE, conf->MAX_SND_FD, conf->TIMEOUT_POLL, conf->NumProc, 
                 conf->MaxThreads, conf->MinThreads, conf->MaxProcCgi, conf->ListenBacklog, 
                 conf->MAX_REQUESTS, conf->KeepAlive, conf->TimeoutKeepAlive, conf->TimeOut, 
-                conf->TimeoutCGI, conf->MaxRanges, conf->UsePHP, conf->PathPHP, conf->ShowMediaFiles, conf->Chunked, 
+                conf->TimeoutCGI, conf->MaxRanges, conf->UsePHP, conf->PathPHP, conf->ShowMediaFiles,
                 conf->ClientMaxBodySize, conf->index_html, conf->index_php, conf->index_pl, conf->index_fcgi, pid);
     printf("   %s;\n   %s\n\n", conf->rootDir, conf->cgiDir);
     fprintf(stderr, "  uid=%u; gid=%u\n", getuid(), getgid());
+    fcgi_list_addr *i = conf->fcgi_list;
+    for (; i; i = i->next)
+    {
+        fprintf(stdout, "   [%s] : [%s]\n", i->scrpt_name, i->addr);
+    }
 
     for ( ; environ[0]; )
     {
@@ -304,9 +319,9 @@ int main_proc()
         int ret_poll = poll(fdrd, num_fdrd, -1);
         if (ret_poll <= 0)
         {
-            print_err("<%s:%d> Error poll()=-1: %s\n", __func__, __LINE__, strerror(errno));
-            if (errno == EINTR)
-                continue;
+            fprintf(stderr, "<%s:%d> Error poll()=-1: %s\n", __func__, __LINE__, strerror(errno));
+            //if (errno == EINTR)
+            //    continue;
             break;
         }
 
@@ -370,7 +385,7 @@ int main_proc()
 
     while ((pid = wait(NULL)) != -1)
     {
-        fprintf(stderr, "<%d> wait() pid: %d\n", __LINE__, pid);
+        //fprintf(stderr, "<%d> wait() pid: %d\n", __LINE__, pid);
     }
 
     free_fcgi_list();

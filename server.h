@@ -118,8 +118,6 @@ struct Config
     char cgiDir[MAX_PATH];
     char logDir[MAX_PATH];
 
-    char Chunked;
-
     long int ClientMaxBodySize;
 
     char UsePHP[16];
