@@ -2,8 +2,6 @@
 
 static struct Config cfg;
 const struct Config* const conf = &cfg;
-
-//void create_logfiles(const char *log_dir, const char * ServerSoftware);
 //======================================================================
 int check_path(char *path, int size)
 {

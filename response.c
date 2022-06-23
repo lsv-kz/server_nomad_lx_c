@@ -25,23 +25,23 @@ void response1(int num_chld)
             return;
         }
         //--------------------------------------------------------------
-        int ret = parse_startline_request(req, req->arrHdrs[0].ptr, req->arrHdrs[0].len);
+        int ret = parse_startline_request(req, req->reqHeadersName[0]);
         if (ret)
         {
             print__err(req, "<%s:%d>  Error parse_startline_request(): %d\n", __func__, __LINE__, ret);
             goto end;
         }
      
-        for (int i = 1; i < req->i_arrHdrs; ++i)
+        for (int i = 1; i < req->countReqHeaders; ++i)
         {
-            ret = parse_headers(req, req->arrHdrs[i].ptr, req->arrHdrs[i].len);
+            ret = parse_headers(req, req->reqHeadersName[i], i);
             if (ret < 0)
             {
                 print__err(req, "<%s:%d>  Error parse_headers(): %d\n", __func__, __LINE__, ret);
                 goto end;
             }
         }
-        
+        //--------------------------------------------------------------
         if (conf->tcp_cork == 'y')
         {
             int optval = 1;
@@ -157,13 +157,8 @@ void response1(int num_chld)
     end:
         if (req->err <= -RS101)
         {
-            req->respStatus = -req->err;
-            send_message(req, NULL, "");
-
             if ((req->reqMethod == M_POST) || (req->reqMethod == M_PUT))
-            {
                 req->connKeepAlive = 0;
-            }
         }
 
         end_response(req);

@@ -457,7 +457,6 @@ void init_struct_request(Connect *req)
     req->scriptName = NULL;
 
     req->i_bufReq = 0;
-    req->i_arrHdrs = 0;
     req->lenTail = 0;
     
     req->sizePath = 0;

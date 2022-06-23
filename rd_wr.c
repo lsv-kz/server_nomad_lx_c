@@ -322,7 +322,6 @@ int hd_read(Connect *req)
     n = empty_line(req);
     if (n == 1)
     {
-        req->timeout = conf->TimeOut;
         return req->i_bufReq;
     }
     else if (n < 0)
@@ -334,47 +333,73 @@ int hd_read(Connect *req)
 int empty_line(Connect *req)
 {
     req->timeout = conf->TimeOut;
-    char *pr, *pn;
+    char *pr, *pn, ch;
     while (req->lenTail > 0)
     {
-        pr = (char*)memchr(req->p_newline, '\r', req->lenTail - 1);
-        pn = (char*)memchr(req->p_newline, '\n', req->lenTail);
-        if (pr && pn)
+        int i = 0, len_line = 0;
+        pr = pn = NULL;
+        while (i < req->lenTail)
         {
-            if ((pn - pr) != 1)
-                return -RS400;
-            
-            if ((pn - req->p_newline) == 1)
+            ch = *(req->p_newline + i);
+            if (ch == '\r')
             {
-                req->lenTail -= (pn+1 - req->p_newline);
-                if (req->lenTail > 0)
-                    req->tail = pn + 1;
-                else
+                if (i == (req->lenTail - 1))
+                    return 0;
+                pr = req->p_newline + i;
+            }
+            else if (ch == '\n')
+            {
+                pn = req->p_newline + i;
+                if ((pr) && ((pn - pr) != 1))
+                    return -RS400;
+                i++;
+                break;
+            }
+            else
+                len_line++;
+            i++;
+        }
+
+        if (pn)
+        {
+            if (pr == NULL)
+                *pn = 0;
+            else
+                *pr = 0;
+
+            if (len_line == 0)
+            {
+                if (req->countReqHeaders == 0)
                 {
-                    req->tail = NULL;
-                    req->lenTail = 0;
+                    if ((pn - req->bufReq + 1) > 4)
+                        return -RS400;
+                    req->lenTail -= i;
+                    req->p_newline = pn + 1;
+                    continue;
                 }
-                
+
+                if (req->lenTail > 0)
+                {
+                    req->tail = pn + 1;
+                    req->lenTail -= i;
+                }
+                else 
+                    req->tail = NULL;
                 return 1;
             }
 
-            if (req->i_arrHdrs < MAX_HEADERS)
+            if (req->countReqHeaders < MAX_HEADERS)
             {
-                req->arrHdrs[req->i_arrHdrs].ptr = req->p_newline;
-                req->arrHdrs[req->i_arrHdrs].len = pn - req->p_newline + 1;
-                ++(req->i_arrHdrs);
+                req->reqHeadersName[req->countReqHeaders] = req->p_newline;
+                req->countReqHeaders++;
             }
             else
-            {
                 return -RS500;
-            }
 
-            req->lenTail -= (pn + 1 - req->p_newline);
+            req->lenTail -= i;
             req->p_newline = pn + 1;
         }
         else if (pr && (!pn))
-            return -RS400;
-        else if ((!pr) && pn)
             return -RS400;
         else
             break;

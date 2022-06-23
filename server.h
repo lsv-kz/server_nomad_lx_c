@@ -169,8 +169,6 @@ typedef struct Connect{
     char      *p_newline;
     char      *tail;
     int       lenTail;
-    int       i_arrHdrs;
-    hdr       arrHdrs[MAX_HEADERS + 1];
     
     int       reqMethod;
 
@@ -200,7 +198,7 @@ typedef struct Connect{
     long long reqContentLength;
     int       countReqHeaders;
     char      *reqHeadersName[MAX_HEADERS + 1];
-    char      *reqHeadersValue[MAX_HEADERS + 1];
+    const char      *reqHeadersValue[MAX_HEADERS + 1];
     
     const char  *scriptName;
     String    *path;
@@ -287,8 +285,8 @@ int str_num(const char *s);
 int clean_path(char *path);
 char *content_type(const char *s);
 const char *base_name(const char *path);
-int parse_startline_request(Connect *req, char *s, int len);
-int parse_headers(Connect *req, char *s, int len);
+int parse_startline_request(Connect *req, char *s);
+int parse_headers(Connect *req, char *s, int i);
 const char *str_err(int i);
 //----------------------------------------------------------------------
 void close_logs(void);

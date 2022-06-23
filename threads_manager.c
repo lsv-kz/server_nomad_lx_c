@@ -155,7 +155,15 @@ void end_response(Connect *req)
     if (req->connKeepAlive == 0 || req->err < 0)
     { // ----- Close connect -----
         if (req->err > NO_PRINT_LOG)
+        {
+            if (req->err < -1)
+            {
+                req->respStatus = -req->err;
+                send_message(req, NULL, "");
+            }
             print_log(req);
+        }
+
         shutdown(req->clientSocket, SHUT_RDWR);
         close(req->clientSocket);
         free(req);

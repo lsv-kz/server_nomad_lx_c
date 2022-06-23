@@ -245,16 +245,15 @@ int main_proc()
                 "   index.html = %c\n"
                 "   index.php = %c\n"
                 "   index.pl = %c\n"
-                "   index.fcgi = %c\n"
-                "  ------------- pid = %d -----------\n",
+                "   index.fcgi = %c\n",
                 s, conf->ServerSoftware, conf->host, conf->servPort, conf->tcp_cork, conf->TcpNoDelay, 
                 conf->SEND_FILE, conf->SNDBUF_SIZE, conf->MAX_SND_FD, conf->TIMEOUT_POLL, conf->NumProc, 
                 conf->MaxThreads, conf->MinThreads, conf->MaxProcCgi, conf->ListenBacklog, 
                 conf->MAX_REQUESTS, conf->KeepAlive, conf->TimeoutKeepAlive, conf->TimeOut, 
                 conf->TimeoutCGI, conf->MaxRanges, conf->UsePHP, conf->PathPHP, conf->ShowMediaFiles,
-                conf->ClientMaxBodySize, conf->index_html, conf->index_php, conf->index_pl, conf->index_fcgi, pid);
+                conf->ClientMaxBodySize, conf->index_html, conf->index_php, conf->index_pl, conf->index_fcgi);
     printf("   %s;\n   %s\n\n", conf->rootDir, conf->cgiDir);
-    fprintf(stderr, "  uid=%u; gid=%u\n", getuid(), getgid());
+
     fcgi_list_addr *i = conf->fcgi_list;
     for (; i; i = i->next)
     {
@@ -272,6 +271,7 @@ int main_proc()
     }
 
     create_proc(conf->NumProc);
+    fprintf(stderr, "  pid=%d, uid=%u; gid=%u\n", pid, getuid(), getgid());
     printf("   pid=%d, uid=%d, gid=%d\n", pid, getuid(), getgid());
     
     if (signal(SIGUSR1, signal_handler) == SIG_ERR)

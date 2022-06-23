@@ -25,6 +25,11 @@ int get_time(char *s, int size_buf)
     return 0;
 }
 //======================================================================
+int to_lower(const char c)
+{
+    return c + ((c >= 'A') && (c <= 'Z') ? ('a' - 'A') : 0);
+}
+//======================================================================
 const char *strstr_case(const char *s1, const char *s2)
 {
     const char *p1, *p2;
@@ -149,7 +154,7 @@ const char *get_str_http_prot(int i)
             return (char*)"HTTP/0.9";
     else if (i == HTTP2)
             return (char*)"HTTP/2";
-    return (char*)"";
+    return (char*)"HTTP/1.1";
 }
 //======================================================================
 char *strstr_lowercase(char * s1, char *s2)
@@ -542,153 +547,156 @@ const char *base_name(const char *path)
     return path;
 }
 //======================================================================
-int parse_startline_request(Connect *req, char *s, int len)
+int parse_startline_request(Connect *req, char *s)
 {
-    char *p, tmp[16];
+    if (s == NULL)
+    {
+        print__err(req, "<%s:%d> Error: start line is empty\n",  __func__, __LINE__);
+        return -1;
+    }
+    char *p = s, *p_val;
     //----------------------------- method -----------------------------
-    p = tmp;
-    int i = 0, n = 0;
-    while ((i < len) && (n < (int)sizeof(tmp)))
+    if (*p == ' ')
+        return -RS400;
+    p_val = p;
+    while (*p)
     {
-        char ch = s[i++];
-        if ((ch != '\x20') && (ch != '\r') && (ch != '\n'))
-            p[n++] = ch;
-        else
+        if (*p == ' ')
+        {
+            *(p++) = 0;
             break;
+        }
+        p++;
     }
-    p[n] = 0;
 
-    req->reqMethod = get_int_method(tmp);
-    if (!req->reqMethod) return -RS400;
+    req->reqMethod = get_int_method(p_val);
+    if (!req->reqMethod)
+        return -RS400;
     //------------------------------- uri ------------------------------
-    char ch = s[i];
-    if ((ch == '\x20') || (ch == '\r') || (ch == '\n'))
+    while (*p == ' ') p++;
+    //if (*p == ' ') return -RS400;
+    p_val = p;
+    while (*p)
     {
-        return -RS400;
-    }
-
-    req->uri = s + i;
-    while (i < len)
-    {
-        char ch = s[i];
-        if ((ch == '\x20') || (ch == '\r') || (ch == '\n') || (ch == 0))
+        if (*p == ' ')
+        {
+            *(p++) = 0;
             break;
-        ++i;
+        }
+        p++;
     }
 
-    if (s[i] == '\r')// HTTP/0.9
-    {
-        req->httpProt = HTTP09;
-        s[i] = 0;
-        return 0;
-    }
-    
-    if (s[i] == '\x20')
-        s[i++] = 0;
-    else
-        return -RS400;
+    req->uri = p_val;
     //------------------------------ version ---------------------------
-    ch = s[i];
-    if ((ch == '\x20') || (ch == '\r') || (ch == '\n'))
-        return -RS400;
-
-    p = tmp;
-    n = 0;
-    while ((i < len) && (n < (int)sizeof(tmp)))
+    while (*p == ' ') p++;
+    //if (*p == ' ') return -RS400;
+    p_val = p;
+    while (*p)
     {
-        char ch = s[i++];
-        if ((ch != '\x20') && (ch != '\r') && (ch != '\n'))
-            p[n++] = ch;
-        else
+        if (*p == ' ')
+        {
+            *(p++) = 0;
             break;
+        }
+        p++;
     }
-    p[n] = 0;
-    
-    if(!(req->httpProt = get_int_http_prot(tmp)))
+
+    if(!(req->httpProt = get_int_http_prot(p_val)))
     {
         print__err(req, "<%s:%d> Error version protocol\n", __func__, __LINE__);
         req->httpProt = HTTP11;
         return -RS400;
     }
-
     return 0;
 }
 //======================================================================
-int parse_headers(Connect *req, char *s, int len)
+int parse_headers(Connect *req, char *pName, int i)
 {
-    int n;
-    char *pName = s, *pVal, *p;
-
-    p = (char*)memchr(pName, '\r', len);
-    if (!p) return -1;
-    *p = 0;
-    
-    if(!(p = (char*)memchr(pName, ':', len)))
+    if (pName == NULL)
     {
-        print__err(req, "<%s:%d> Error: ':' not found\n", __func__, __LINE__);
-        return -RS400;
+        print__err(req, "<%s:%d> Error: header is empty\n",  __func__, __LINE__);
+        return -1;
     }
-    *p = 0;
-
-    n = strspn(p + 1, "\x20");
-    pVal = p + 1 + n;
     
-    if(!strlcmp_case(pName, "connection", 32))
+    if (req->httpProt == HTTP09)
     {
-        req->iConnection = req->countReqHeaders;
+        print__err(req, "<%s:%d> Error version protocol\n", __func__, __LINE__);
+        return -1;
+    }
+    
+    char *pVal = pName, ch;
+    int colon = 0;
+    while ((ch = *pVal))
+    {
+        if (ch == ':')
+            colon = 1;
+        else if ((ch == ' ') || (ch == '\t') || (ch == '\n') || (ch == '\r'))
+        {
+            if (colon == 0)
+                return -RS400;
+            *(pVal++) = 0;
+            break;
+        }
+        else
+            *pVal = to_lower(ch);
+        pVal++;
+    }
+
+    while (*pVal == ' ')
+        pVal++;
+    //------------------------------------------------------------------
+    if (!strcmp(pName, "accept-encoding"))
+    {
+        req->iAcceptEncoding = i;
+    }
+    else if (!strcmp(pName, "connection"))
+    {
+        req->iConnection = i;
         if(strstr_case(pVal, "keep-alive"))
             req->connKeepAlive = 1;
         else
             req->connKeepAlive = 0;
     }
-    else if(!strlcmp_case(pName, "host", 32))
+    else if (!strcmp(pName, "content-length"))
     {
-        req->iHost = req->countReqHeaders;
+        req->reqContentLength = atoll(pVal);
+        req->iContentLength = i;
     }
-    else if(!strlcmp_case(pName, "range", 32))
+    else if (!strcmp(pName, "content-type"))
+    {
+        req->iReqContentType = i;
+    }
+    else if (!strcmp(pName, "host"))
+    {
+        req->iHost = i;
+    }
+    else if (!strcmp(pName, "if-range"))
+    {
+        req->iIf_Range = i;
+    }
+    else if (!strcmp(pName, "range"))
     {
         char *p = strchr(pVal, '=');
         if (p)
             req->sRange = p + 1;
         else
             req->sRange = NULL;
-        req->iRange = req->countReqHeaders;
+        req->iRange = i;
     }
-    else if(!strlcmp_case(pName, "If-Range", 32))
+    else if (!strcmp(pName, "referer"))
     {
-        req->iIf_Range = req->countReqHeaders;
+        req->iReferer = i;
     }
-    else if(!strlcmp_case(pName, "referer", 32))
+    else if (!strcmp(pName, "upgrade"))
     {
-        req->iReferer = req->countReqHeaders;
+        req->iUpgrade = i;
     }
-    else if(!strlcmp_case(pName, "user-agent", 32))
+    else if (!strcmp(pName, "user-agent"))
     {
-        req->iUserAgent = req->countReqHeaders;
-    }
-    else if(!strlcmp_case(pName, "upgrade", 32))
-    {
-        req->iUpgrade = req->countReqHeaders;
-    }
-    else if(!strlcmp_case(pName, "content-length", 32))
-    {
-        req->reqContentLength = atoll(pVal);
-        req->iContentLength = req->countReqHeaders;
-    }
-    else if(!strlcmp_case(pName, "content-type", 32))
-    {
-        req->iReqContentType = req->countReqHeaders;
-    }
-    else if(!strlcmp_case(pName, "accept-encoding", 32))
-    {
-        req->iAcceptEncoding = req->countReqHeaders;
+        req->iUserAgent = i;
     }
 
-    req->reqHeadersName[req->countReqHeaders] = pName;
-    req->reqHeadersValue[req->countReqHeaders] = pVal;
-    ++req->countReqHeaders;
-    req->reqHeadersName[req->countReqHeaders] = NULL;
-    req->reqHeadersValue[req->countReqHeaders] = NULL;
+    req->reqHeadersValue[i] = pVal;
 
     return 0;
 }
