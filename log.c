@@ -22,14 +22,14 @@ void create_logfiles(const char *log_dir, const char * ServerSoftware)
         fprintf(stderr,"  Error create logfile: %s; cwd: %s\n", s, getcwd(buf, sizeof(buf)));
         exit(1);
     }
-    
+/*
     struct flock flck;
     flck.l_type = F_WRLCK;
     flck.l_whence = SEEK_SET;
     flck.l_start = 0;
     flck.l_len = 0;
     fcntl(flog, F_SETLK, &flck);
-
+*/
     snprintf(s, sizeof(s), "%s/%s-%s", log_dir, ServerSoftware, "error.log");
     flog_err = open(s, O_CREAT | O_APPEND | O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if(flog_err == -1)
@@ -37,13 +37,13 @@ void create_logfiles(const char *log_dir, const char * ServerSoftware)
         fprintf(stderr,"  Error create log_err: %s\n", s);
         exit(1);
     }
-    
+/*
     flck.l_type = F_WRLCK;
     flck.l_whence = SEEK_SET;
     flck.l_start = 0;
     flck.l_len = 0;
     fcntl(flog_err, F_SETLK, &flck);
-    
+*/
     dup2(flog_err, STDERR_FILENO);
 }
 //======================================================================
@@ -92,33 +92,25 @@ void print_log(Connect *req)
 {
     const int size = 320;
     char buf[size];
-    int len;
-        
-    snprintf(buf, size,"%d/%d/%d - %s - [%s] - ",     
-                req->numProc,
-                req->numConn,
-                req->numReq,
-                req->remoteAddr,
-                req->sLogTime);
-    len = strlen(buf);
-    
-    if (req->reqMethod > 0)
-        snprintf(buf + len, size - len, "\"%s %s %s\" ", 
-                get_str_method(req->reqMethod),
-                req->decodeUri,
-                get_str_http_prot(req->httpProt));
-    else
-        snprintf(buf + len, size - len, "\"-\" ");
-        
-    len = strlen(buf);
-    int n = snprintf(buf + len, size - len, "%d %lld \"%s\" \"%s\"\n",
-                req->respStatus,
-                req->send_bytes,
-                (req->iReferer >= 0) ? req->reqHeadersValue[req->iReferer] : "-",
-                (req->iUserAgent >= 0) ? req->reqHeadersValue[req->iUserAgent] : "-");
-    if (n >= (size - len))
+
+    if (req->reqMethod <= 0)
+        return;
+
+    int n = snprintf(buf, size, "%d/%d/%d - %s - [%s] - \"%s %s %s\" %d %lld \"%s\" \"%s\"\n",
+            req->numProc,
+            req->numConn,
+            req->numReq,
+            req->remoteAddr,
+            req->sLogTime, 
+            get_str_method(req->reqMethod),
+            req->decodeUri,
+            get_str_http_prot(req->httpProt), 
+            req->respStatus,
+            req->send_bytes,
+            (req->iReferer >= 0) ? req->reqHeadersValue[req->iReferer] : "-",
+            (req->iUserAgent >= 0) ? req->reqHeadersValue[req->iUserAgent] : "-");
+    if (n >= size)
         buf[size - 2] = '\n';
-pthread_mutex_lock(&mtx_log);
+
     write(flog, buf, strlen(buf));
-pthread_mutex_unlock(&mtx_log);
 }

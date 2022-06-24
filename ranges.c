@@ -109,30 +109,7 @@ int parse_ranges(Connect *req, int Len)
                 i++;
             }
         }
-        else if (*p1 == ',')
-        {
-            if (i == 2)
-                end = size - 1;
-            else if (i != 3)
-            {
-                fprintf(stderr, "<%s:%d> \"416 Requested Range Not Satisfiable\"\n", __func__, __LINE__);
-                return -416;
-            }
-
-            if (end >= size)
-                end = size - 1;
-            
-            if (start <= end)// 
-            {
-                req->rangeBytes[req->numPart++] = (Range){start, end, end - start + 1};
-                //printf("   <%d> [%lld-%lld/%lld]\n", __LINE__, start, end, end - start + 1);
-            }
-            
-            start = end = 0;
-            p1++;
-            i = 0;
-        }
-        else if (*p1 == 0)
+        else if ((*p1 == ',') || (*p1 == 0))
         {
             if (i == 2)
                 end = size - 1;
@@ -148,11 +125,14 @@ int parse_ranges(Connect *req, int Len)
             if (start <= end)
             {
                 req->rangeBytes[req->numPart++] = (Range){start, end, end - start + 1};
-                //printf("   <%d> [%lld-%lld/%lld]\n", __LINE__, start, end, end - start + 1);
+                if (*p1 == 0)
+                    break;
+                start = end = 0;
+                p1++;
+                i = 0;
             }
-
-            start = end = 0;
-            break;
+            else
+                return -416;
         }
         else
         {

@@ -645,11 +645,11 @@ int parse_headers(Connect *req, char *pName, int i)
     while (*pVal == ' ')
         pVal++;
     //------------------------------------------------------------------
-    if (!strcmp(pName, "accept-encoding"))
+    if (!strcmp(pName, "accept-encoding:"))
     {
         req->iAcceptEncoding = i;
     }
-    else if (!strcmp(pName, "connection"))
+    else if (!strcmp(pName, "connection:"))
     {
         req->iConnection = i;
         if(strstr_case(pVal, "keep-alive"))
@@ -657,24 +657,24 @@ int parse_headers(Connect *req, char *pName, int i)
         else
             req->connKeepAlive = 0;
     }
-    else if (!strcmp(pName, "content-length"))
+    else if (!strcmp(pName, "content-length:"))
     {
         req->reqContentLength = atoll(pVal);
         req->iContentLength = i;
     }
-    else if (!strcmp(pName, "content-type"))
+    else if (!strcmp(pName, "content-type:"))
     {
         req->iReqContentType = i;
     }
-    else if (!strcmp(pName, "host"))
+    else if (!strcmp(pName, "host:"))
     {
         req->iHost = i;
     }
-    else if (!strcmp(pName, "if-range"))
+    else if (!strcmp(pName, "if-range:"))
     {
         req->iIf_Range = i;
     }
-    else if (!strcmp(pName, "range"))
+    else if (!strcmp(pName, "range:"))
     {
         char *p = strchr(pVal, '=');
         if (p)
@@ -683,15 +683,15 @@ int parse_headers(Connect *req, char *pName, int i)
             req->sRange = NULL;
         req->iRange = i;
     }
-    else if (!strcmp(pName, "referer"))
+    else if (!strcmp(pName, "referer:"))
     {
         req->iReferer = i;
     }
-    else if (!strcmp(pName, "upgrade"))
+    else if (!strcmp(pName, "upgrade:"))
     {
         req->iUpgrade = i;
     }
-    else if (!strcmp(pName, "user-agent"))
+    else if (!strcmp(pName, "user-agent:"))
     {
         req->iUserAgent = i;
     }
