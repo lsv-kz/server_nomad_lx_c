@@ -2,6 +2,7 @@
 
 static struct Config cfg;
 const struct Config* const conf = &cfg;
+const int min_open_fd = 8;
 //======================================================================
 int check_path(char *path, int size)
 {
@@ -533,7 +534,7 @@ int read_conf_file_(FILE *f)
     }
     else
     {
-        long max_fd = (cfg.MAX_REQUESTS * 2) + 8;
+        long max_fd = (cfg.MAX_REQUESTS * 2) + min_open_fd;
         if (max_fd > (long)lim.rlim_cur)
         {
             if (max_fd > (long)lim.rlim_max)
@@ -545,7 +546,7 @@ int read_conf_file_(FILE *f)
                 print_err("<%s:%d> Error setrlimit(RLIMIT_NOFILE): %s\n", __func__, __LINE__, strerror(errno));
             max_fd = sysconf(_SC_OPEN_MAX);
             if (max_fd > 1)
-                cfg.MAX_REQUESTS = (max_fd - 8)/2;
+                cfg.MAX_REQUESTS = (max_fd - min_open_fd)/2;
             else
             {
                 print_err("<%s:%d> Error sysconf(_SC_OPEN_MAX): %s\n", __func__, __LINE__, strerror(errno));
