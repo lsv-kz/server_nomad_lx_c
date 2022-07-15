@@ -1,25 +1,23 @@
 #include "server.h"
 
-uid_t server_uid;
-gid_t server_gid;
-
 static int sockServer;
 
-int create_server_socket(const struct Config *conf);
+int create_server_socket(const Config *conf);
 int read_conf_file(const char *path_conf);
 void create_logfiles(const char *log_dir, const char * ServerSoftware);
 int set_uid();
+int main_proc();
 
 static int from_chld[2], unixFD[8];
 static pid_t pidArr[8];
 static int numConn[8];
 static char conf_dir[512];
 static int restart = 0;
-static int run = 0;
-int main_proc();
+static unsigned int all_conn = 0;
 //======================================================================
 static void signal_handler(int sig)
 {
+    fprintf(stderr, "<main> All connect: %u\n", all_conn);
     if (sig == SIGINT)
     {
         fprintf(stderr, "<main> ######  SIGINT  ######\n");
@@ -61,7 +59,7 @@ void create_proc(int NumProc)
 {
     if (pipe(from_chld) < 0)
     {
-        fprintf(stderr, "<%s():%d> Error pipe(): %s\n", __FUNCTION__, __LINE__, strerror(errno));
+        fprintf(stderr, "<%s:%d> Error pipe(): %s\n", __func__, __LINE__, strerror(errno));
         exit(1);
     }
     //------------------------------------------------------------------
@@ -195,12 +193,21 @@ int main(int argc, char *argv[])
     return 0;
 }
 //======================================================================
+static int run = 0;
+//----------------------------------------------------------------------
 int main_proc()
 {
     char s[256];
 
     if (read_conf_file(conf_dir))
         return -1;
+    sockServer = create_server_socket(conf);
+    if (sockServer == -1)
+    {
+        fprintf(stderr, "<%d>   server: failed to bind [%s:%s]\n", __LINE__, conf->host, conf->servPort);
+        exit(1);
+    }
+
     create_logfiles(conf->logDir, conf->ServerSoftware);
     if (run == 0)
     {
@@ -210,13 +217,6 @@ int main_proc()
     //------------------------------------------------------------------
     pid_t pid = getpid();
 
-    sockServer = create_server_socket(conf);
-    if (sockServer == -1)
-    {
-        fprintf(stderr, "<%d>   server: failed to bind [%s:%s]\n", __LINE__, conf->host, conf->servPort);
-        exit(1);
-    }
-
     get_time(s, 64);
     printf(     " [%s] - server \"%s\" run\n"
                 "   ip = %s\n"
@@ -224,6 +224,7 @@ int main_proc()
                 "   tcp_cork = %c\n"
                 "   TcpNoDelay = %c\n\n"
                 "   SendFile = %c\n"
+                "   SendFileSizePart = %ld\n"
                 "   SndBufSize = %d\n"
                 "   MaxSndFd = %d\n"
                 "   TimeoutPoll = %d\n\n"
@@ -246,10 +247,10 @@ int main_proc()
                 "   index.php = %c\n"
                 "   index.pl = %c\n"
                 "   index.fcgi = %c\n",
-                s, conf->ServerSoftware, conf->host, conf->servPort, conf->tcp_cork, conf->TcpNoDelay, 
-                conf->SEND_FILE, conf->SNDBUF_SIZE, conf->MAX_SND_FD, conf->TIMEOUT_POLL, conf->NumProc, 
-                conf->MaxThreads, conf->MinThreads, conf->MaxProcCgi, conf->ListenBacklog, 
-                conf->MAX_REQUESTS, conf->KeepAlive, conf->TimeoutKeepAlive, conf->TimeOut, 
+                s, conf->ServerSoftware, conf->host, conf->servPort, conf->tcp_cork, conf->TcpNoDelay,
+                conf->SEND_FILE, conf->SEND_FILE_SIZE_PART, conf->SNDBUF_SIZE, conf->MAX_SND_FD,
+                conf->TIMEOUT_POLL, conf->NumProc, conf->MaxThreads, conf->MinThreads, conf->MaxProcCgi,
+                conf->ListenBacklog, conf->MAX_REQUESTS, conf->KeepAlive, conf->TimeoutKeepAlive, conf->TimeOut,
                 conf->TimeoutCGI, conf->MaxRanges, conf->UsePHP, conf->PathPHP, conf->ShowMediaFiles,
                 conf->ClientMaxBodySize, conf->index_html, conf->index_php, conf->index_pl, conf->index_fcgi);
     printf("   %s;\n   %s\n\n", conf->rootDir, conf->cgiDir);
@@ -271,8 +272,8 @@ int main_proc()
     }
 
     create_proc(conf->NumProc);
-    fprintf(stderr, "  pid=%d, uid=%u; gid=%u\n", pid, getuid(), getgid());
-    printf("   pid=%d, uid=%d, gid=%d\n", pid, getuid(), getgid());
+    fprintf(stdout, "   pid=%u, uid=%u, gid=%u\n", pid, getuid(), getgid());
+    fprintf(stderr, "   pid=%u, uid=%u, gid=%u\n", pid, getuid(), getgid());
     
     if (signal(SIGUSR1, signal_handler) == SIG_ERR)
     {
@@ -292,6 +293,9 @@ int main_proc()
         exit (EXIT_FAILURE);
     }
     //------------------------------------------------------------------
+    for (int i = 0; i < conf->NumProc; ++i)
+        numConn[i] = 0;
+
     int close_server = 0;
     static struct pollfd fdrd[2];
 
@@ -302,6 +306,10 @@ int main_proc()
     fdrd[1].events = POLLIN;
 
     int num_fdrd, i_fd;
+    int send_sock = 0;
+
+    struct sockaddr_storage clientAddr;
+    socklen_t addrSize = sizeof(struct sockaddr_storage);
 
     while (!close_server)
     {
@@ -316,12 +324,34 @@ int main_proc()
         else
             num_fdrd = 2;
 
+        if (send_sock > 0)
+        {
+            int ret = send_fd(unixFD[i_fd], send_sock, &clientAddr, addrSize);
+            if (ret == -ENOBUFS)
+            {
+                num_fdrd = 1;
+                print_err("<%s:%d> Error send_fd: ENOBUFS\n", __func__, __LINE__);
+            }
+            else if (ret == -1)
+            {
+                print_err("<%s:%d> Error sendClientSock()\n", __func__, __LINE__);
+                break;
+            }
+            else
+            {
+                close(send_sock);
+                send_sock = 0;
+                numConn[i_fd]++;
+                continue;
+            }
+        }
+
         int ret_poll = poll(fdrd, num_fdrd, -1);
         if (ret_poll <= 0)
         {
-            fprintf(stderr, "<%s:%d> Error poll()=-1: %s\n", __func__, __LINE__, strerror(errno));
             //if (errno == EINTR)
             //    continue;
+            print_err("<%s:%d> Error poll()=-1: %s\n", __func__, __LINE__, strerror(errno));
             break;
         }
 
@@ -342,27 +372,34 @@ int main_proc()
             ret_poll--;
         }
 
-        if ((fdrd[1].revents == POLLIN) && (ret_poll))
+        if (ret_poll && (fdrd[1].revents == POLLIN))
         {
-            struct sockaddr_storage clientAddr;
-            socklen_t addrSize = sizeof(struct sockaddr_storage);// 128
-
+            addrSize = sizeof(struct sockaddr_storage);
             int clientSock = accept(sockServer, (struct sockaddr *)&clientAddr, &addrSize);
             if (clientSock == -1)
             {
                 print_err("<%s:%d> Error accept()=-1: %s\n", __func__, __LINE__, strerror(errno));
                 break;
             }
-
-            if (send_fd(unixFD[i_fd], clientSock, &clientAddr, addrSize) < 0)
+            all_conn++;
+            int ret = send_fd(unixFD[i_fd], clientSock, &clientAddr, addrSize);
+            if (ret == -ENOBUFS)
             {
-                print_err("<%s:%d> Error sendClientSock()\n", __func__, __LINE__);
+                send_sock = clientSock;
+                print_err("<%s:%d> Error send_fd: ENOBUFS\n", __func__, __LINE__);
+                continue;
+            }
+            else if (ret == -1)
+            {
+                print_err("<%s:%d> Error send_fd()\n", __func__, __LINE__);
                 break;
             }
-
-            close(clientSock);
-            numConn[i_fd]++;
-            ret_poll--;
+            else
+            {
+                close(clientSock);
+                numConn[i_fd]++;
+                ret_poll--;
+            }
         }
 
         if (ret_poll)
@@ -376,6 +413,7 @@ int main_proc()
     print_err("<%s:%d> ********************\n", __func__, __LINE__);
     for (int i = 0; i < conf->NumProc; ++i)
     {
+        shutdown(unixFD[i], SHUT_RDWR);
         close(unixFD[i]);
     }
 
@@ -385,7 +423,7 @@ int main_proc()
 
     while ((pid = wait(NULL)) != -1)
     {
-        //fprintf(stderr, "<%d> wait() pid: %d\n", __LINE__, pid);
+        fprintf(stderr, "<%d> wait() pid: %d\n", __LINE__, pid);
     }
 
     free_fcgi_list();

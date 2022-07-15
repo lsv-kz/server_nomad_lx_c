@@ -1,7 +1,7 @@
 #include "server.h"
 
-static struct Config cfg;
-const struct Config* const conf = &cfg;
+static Config c;
+const Config* const conf = &c;
 const int min_open_fd = 8;
 //======================================================================
 int check_path(char *path, int size)
@@ -45,15 +45,16 @@ void create_conf_file()
     }
 
     fprintf(f, "ServerAddr   %s\n", "0.0.0.0");
-    fprintf(f, "Port         ?\n");
-    fprintf(f, "ServerSoftware   ?\n");
+    fprintf(f, "Port         ? \n");
+    fprintf(f, "ServerSoftware   ? \n");
 
-    fprintf(f, "tcp_cork   n\n");
+    fprintf(f, "tcp_cork   n \n");
 
     fprintf(f, "SndBufSize   32768\n");
-    fprintf(f, "TcpNoDelay   y\n");
+    fprintf(f, "TcpNoDelay   y \n");
 
-    fprintf(f, "SendFile   n\n\n");
+    fprintf(f, "SendFile   n \n");
+    fprintf(f, "SendFileSizePart   1000000\n\n");
 
     fprintf(f, "DocumentRoot %s\n", "?");
     fprintf(f, "ScriptPath   %s\n", "?");
@@ -345,8 +346,8 @@ int read_conf_file_(FILE *f)
     char s1[512];
     Line ln;
 
-    cfg.index_html = cfg.index_php = cfg.index_pl = cfg.index_fcgi = 'n';
-    cfg.fcgi_list = NULL;
+    c.index_html = c.index_php = c.index_pl = c.index_fcgi = 'n';
+    c.fcgi_list = NULL;
 
     int n, err;
     while ((n = getLine(f, &ln)) > 0)
@@ -355,65 +356,67 @@ int read_conf_file_(FILE *f)
             return -1;
 
         if (!strcmp(s1, "ServerAddr") && (n == 2))
-            err = get_word(&ln, cfg.host, sizeof(cfg.host));
+            err = get_word(&ln, c.host, sizeof(c.host));
         else if (!strcmp(s1, "Port") && (n == 2))
-            err = get_word(&ln, cfg.servPort, sizeof(cfg.servPort));
+            err = get_word(&ln, c.servPort, sizeof(c.servPort));
         else if (!strcmp(s1, "ServerSoftware") && (n == 2))
-            err = get_word(&ln, cfg.ServerSoftware, sizeof(cfg.ServerSoftware));
+            err = get_word(&ln, c.ServerSoftware, sizeof(c.ServerSoftware));
         else if (!strcmp(s1, "tcp_cork") && (n == 2))
-            err = get_bool(&ln, &(cfg.tcp_cork));
+            err = get_bool(&ln, &(c.tcp_cork));
         else if (!strcmp(s1, "SndBufSize") && (n == 2))
-            err = get_int(&ln, &cfg.SNDBUF_SIZE);
+            err = get_int(&ln, &c.SNDBUF_SIZE);
         else if (!strcmp(s1, "SendFile") && (n == 2))
-            err = get_bool(&ln, &(cfg.SEND_FILE));
+            err = get_bool(&ln, &(c.SEND_FILE));
+        else if (!strcmp(s1, "SendFileSizePart") && (n == 2))
+            err = get_long(&ln, &(c.SEND_FILE_SIZE_PART));
         else if (!strcmp(s1, "TcpNoDelay") && (n == 2))
-            err = get_bool(&ln, &(cfg.TcpNoDelay));
+            err = get_bool(&ln, &(c.TcpNoDelay));
         else if (!strcmp(s1, "DocumentRoot") && (n == 2))
-            err = get_word(&ln, cfg.rootDir, sizeof(cfg.rootDir));
+            err = get_word(&ln, c.rootDir, sizeof(c.rootDir));
         else if (!strcmp(s1, "ScriptPath") && (n == 2))
-            err = get_word(&ln, cfg.cgiDir, sizeof(cfg.cgiDir));
+            err = get_word(&ln, c.cgiDir, sizeof(c.cgiDir));
         else if (!strcmp(s1, "LogPath") && (n == 2))
-            err = get_word(&ln, cfg.logDir, sizeof(cfg.logDir));
+            err = get_word(&ln, c.logDir, sizeof(c.logDir));
         else if (!strcmp(s1, "MaxRequestsPerThr") && (n == 2))
-            err = get_int(&ln, &cfg.MaxRequestsPerThr);
+            err = get_int(&ln, &c.MaxRequestsPerThr);
         else if (!strcmp(s1, "ListenBacklog") && (n == 2))
-            err = get_int(&ln, &cfg.ListenBacklog);
+            err = get_int(&ln, &c.ListenBacklog);
         else if (!strcmp(s1, "MaxSndFd") && (n == 2))
-            err = get_int(&ln, &cfg.MAX_SND_FD);
+            err = get_int(&ln, &c.MAX_SND_FD);
         else if (!strcmp(s1, "TimeoutPoll") && (n == 2))
-            err = get_int(&ln, &cfg.TIMEOUT_POLL);
+            err = get_int(&ln, &c.TIMEOUT_POLL);
         else if (!strcmp(s1, "MaxRequests") && (n == 2))
-            err = get_int(&ln, &cfg.MAX_REQUESTS);
+            err = get_int(&ln, &c.MAX_REQUESTS);
         else if (!strcmp(s1, "NumProc") && (n == 2))
-            err = get_int(&ln, &cfg.NumProc);
+            err = get_int(&ln, &c.NumProc);
         else if (!strcmp(s1, "MaxThreads") && (n == 2))
-            err = get_int(&ln, &cfg.MaxThreads);
+            err = get_int(&ln, &c.MaxThreads);
         else if (!strcmp(s1, "MinThreads") && (n == 2))
-            err = get_int(&ln, &cfg.MinThreads);
+            err = get_int(&ln, &c.MinThreads);
         else if (!strcmp(s1, "MaxProcCgi") && (n == 2))
-            err = get_int(&ln, &cfg.MaxProcCgi);
+            err = get_int(&ln, &c.MaxProcCgi);
         else if (!strcmp(s1, "KeepAlive") && (n == 2))
-            err = get_bool(&ln, &cfg.KeepAlive);
+            err = get_bool(&ln, &c.KeepAlive);
         else if (!strcmp(s1, "TimeoutKeepAlive") && (n == 2))
-            err = get_int(&ln, &cfg.TimeoutKeepAlive);
+            err = get_int(&ln, &c.TimeoutKeepAlive);
         else if (!strcmp(s1, "TimeOut") && (n == 2))
-            err = get_int(&ln, &cfg.TimeOut);
+            err = get_int(&ln, &c.TimeOut);
         else if (!strcmp(s1, "TimeoutCGI") && (n == 2))
-            err = get_int(&ln, &cfg.TimeoutCGI);
+            err = get_int(&ln, &c.TimeoutCGI);
         else if (!strcmp(s1, "MaxRanges") && (n == 2))
-            err = get_int(&ln, &cfg.MaxRanges);
+            err = get_int(&ln, &c.MaxRanges);
         else if (!strcmp(s1, "UsePHP") && (n == 2))
-            err = get_word(&ln, cfg.UsePHP, sizeof(cfg.UsePHP));
+            err = get_word(&ln, c.UsePHP, sizeof(c.UsePHP));
         else if (!strcmp(s1, "PathPHP") && (n == 2))
-            err = get_word(&ln, cfg.PathPHP, sizeof(cfg.PathPHP));
+            err = get_word(&ln, c.PathPHP, sizeof(c.PathPHP));
         else if (!strcmp(s1, "ShowMediaFiles") && (n == 2))
-            err = get_bool(&ln, &cfg.ShowMediaFiles);
+            err = get_bool(&ln, &c.ShowMediaFiles);
         else if (!strcmp(s1, "ClientMaxBodySize") && (n == 2))
-            err = get_long(&ln, &cfg.ClientMaxBodySize);
+            err = get_long(&ln, &c.ClientMaxBodySize);
         else if (!strcmp(s1, "User") && (n == 2))
-            err = get_word(&ln, cfg.user, sizeof(cfg.user));
+            err = get_word(&ln, c.user, sizeof(c.user));
         else if (!strcmp(s1, "Group") && (n == 2))
-            err = get_word(&ln, cfg.group, sizeof(cfg.group));
+            err = get_word(&ln, c.group, sizeof(c.group));
         else if (!strcmp(s1, "index") && (n == 1))
         {
             if (find_bracket(f) == 0)
@@ -428,13 +431,13 @@ int read_conf_file_(FILE *f)
                     break;
 
                 if (!strcmp(ln.s, "index.html"))
-                    cfg.index_html = 'y';
+                    c.index_html = 'y';
                 else if (!strcmp(ln.s, "index.php"))
-                    cfg.index_php = 'y';
+                    c.index_php = 'y';
                 else if (!strcmp(ln.s, "index.pl"))
-                    cfg.index_pl = 'y';
+                    c.index_pl = 'y';
                 else if (!strcmp(ln.s, "index.fcgi"))
-                    cfg.index_fcgi = 'y';
+                    c.index_fcgi = 'y';
                 else
                 {
                     fprintf(stderr, "<%s:%d> Error directive: [%s] line: %u\n", __func__, __LINE__, ln.s, line_);
@@ -465,7 +468,7 @@ int read_conf_file_(FILE *f)
                 if (get_word(&ln, s2, sizeof(s2)) <= 0)
                     return -1;
 
-                if (create_fcgi_list(&cfg.fcgi_list, s1, s2))
+                if (create_fcgi_list(&c.fcgi_list, s1, s2))
                     return -1;
             }
 
@@ -480,7 +483,7 @@ int read_conf_file_(FILE *f)
             fprintf(stderr, "<%s:%d> Error [%s] line: %u\n", __func__, __LINE__, ln.s, line_);
             return -1;
         }
-        
+
         if (err <= 0)
         {
             fprintf(stderr, "<%s:%d> Error directive [%s] line: %u\n", __func__, __LINE__, ln.s, line_);
@@ -494,47 +497,47 @@ int read_conf_file_(FILE *f)
         return -1;
     }
     //------------------------------------------------------------------
-    if (check_path(cfg.logDir, sizeof(cfg.logDir)) == -1)
+    if (check_path(c.logDir, sizeof(c.logDir)) == -1)
     {
-        fprintf(stderr, "!!! Error logDir [%s]\n", cfg.logDir);
+        fprintf(stderr, "!!! Error logDir [%s]\n", c.logDir);
         return -1;
     }
     //------------------------------------------------------------------
-    if (check_path(cfg.rootDir, sizeof(cfg.rootDir)) == -1)
+    if (check_path(c.rootDir, sizeof(c.rootDir)) == -1)
     {
-        fprintf(stderr, "!!! Error rootDir [%s]\n", cfg.rootDir);
+        fprintf(stderr, "!!! Error rootDir [%s]\n", c.rootDir);
         return -1;
     }
     //------------------------------------------------------------------
-    if (check_path(cfg.cgiDir, sizeof(cfg.cgiDir)) == -1)
+    if (check_path(c.cgiDir, sizeof(c.cgiDir)) == -1)
     {
-        cfg.cgiDir[0] = '\0';
-        fprintf(stderr, "!!! Error cgi_dir [%s]\n", cfg.cgiDir);
+        c.cgiDir[0] = '\0';
+        fprintf(stderr, "!!! Error ScriptPath [%s]\n", c.cgiDir);
     }
     //------------------------------------------------------------------
-    if ((cfg.NumProc < 1) || (cfg.NumProc > 8))
+    if ((c.NumProc < 1) || (c.NumProc > 8))
     {
-        fprintf(stderr, "<%s:%d> Error NumProc = %d; [1 < NumProc <= 6]\n", __func__, __LINE__, cfg.NumProc);
+        fprintf(stderr, "<%s:%d> Error NumProc = %d; [1 < NumProc <= 6]\n", __func__, __LINE__, c.NumProc);
         return -1;
     }
 
-    if (cfg.MinThreads > cfg.MaxThreads)
+    if (c.MinThreads > c.MaxThreads)
     {
         fprintf(stderr, "<%s:%d> Error: NumThreads > MaxThreads\n", __func__, __LINE__);
         return -1;
     }
 
-    if (cfg.MinThreads < 1)
-        cfg.MinThreads = 1;
+    if (c.MinThreads < 1)
+        c.MinThreads = 1;
 
     struct rlimit lim;
     if (getrlimit(RLIMIT_NOFILE, &lim) == -1)
     {
-        print_err("<%s:%d> Error getrlimit(RLIMIT_NOFILE): %s\n", __func__, __LINE__, strerror(errno));
+        fprintf(stderr, "<%s:%d> Error getrlimit(RLIMIT_NOFILE): %s\n", __func__, __LINE__, strerror(errno));
     }
     else
     {
-        long max_fd = (cfg.MAX_REQUESTS * 2) + min_open_fd;
+        long max_fd = (c.MAX_REQUESTS * 2) + min_open_fd;
         if (max_fd > (long)lim.rlim_cur)
         {
             if (max_fd > (long)lim.rlim_max)
@@ -543,13 +546,16 @@ int read_conf_file_(FILE *f)
                 lim.rlim_cur = max_fd;
 
             if (setrlimit(RLIMIT_NOFILE, &lim) == -1)
-                print_err("<%s:%d> Error setrlimit(RLIMIT_NOFILE): %s\n", __func__, __LINE__, strerror(errno));
+                fprintf(stderr, "<%s:%d> Error setrlimit(RLIMIT_NOFILE): %s\n", __func__, __LINE__, strerror(errno));
             max_fd = sysconf(_SC_OPEN_MAX);
             if (max_fd > 1)
-                cfg.MAX_REQUESTS = (max_fd - min_open_fd)/2;
+            {
+                c.MAX_REQUESTS = (max_fd - min_open_fd)/2;
+                fprintf(stderr, "<%s:%d> MAX_REQUESTS=%d, max_fd=%ld\n", __func__, __LINE__, c.MAX_REQUESTS, max_fd);
+            }
             else
             {
-                print_err("<%s:%d> Error sysconf(_SC_OPEN_MAX): %s\n", __func__, __LINE__, strerror(errno));
+                fprintf(stderr, "<%s:%d> Error sysconf(_SC_OPEN_MAX): %s\n", __func__, __LINE__, strerror(errno));
                 return -1;
             }
         }
@@ -563,61 +569,61 @@ int set_uid()
     if (uid == 0)
     {
         char *p;
-        cfg.server_uid = strtol(cfg.user, &p, 0);
+        c.server_uid = strtol(conf->user, &p, 0);
         if (*p == '\0')
         {
-            struct passwd *passwdbuf = getpwuid(cfg.server_uid);
+            struct passwd *passwdbuf = getpwuid(conf->server_uid);
             if (!passwdbuf)
             {
-                fprintf(stderr, "<%s:%d> Error getpwuid(%u): %s\n", __func__, __LINE__, cfg.server_uid, strerror(errno));
+                fprintf(stderr, "<%s:%d> Error getpwuid(%u): %s\n", __func__, __LINE__, conf->server_uid, strerror(errno));
                 return -1;
             }
         }
         else
         {
-            struct passwd *passwdbuf = getpwnam(cfg.user);
+            struct passwd *passwdbuf = getpwnam(conf->user);
             if (!passwdbuf)
             {
-                fprintf(stderr, "<%s:%d> Error getpwnam(%s): %s\n", __func__, __LINE__, cfg.user, strerror(errno));
+                fprintf(stderr, "<%s:%d> Error getpwnam(%s): %s\n", __func__, __LINE__, conf->user, strerror(errno));
                 return -1;
             }
-            cfg.server_uid = passwdbuf->pw_uid;
+            c.server_uid = passwdbuf->pw_uid;
         }
 
-        cfg.server_gid = strtol(cfg.group, &p, 0);
+        c.server_gid = strtol(conf->group, &p, 0);
         if (*p == '\0')
         {
-            struct group *groupbuf = getgrgid(cfg.server_gid);
+            struct group *groupbuf = getgrgid(conf->server_gid);
             if (!groupbuf)
             {
-                fprintf(stderr, "<%s:%d> Error getgrgid(%u): %s\n", __func__, __LINE__, cfg.server_gid, strerror(errno));
+                fprintf(stderr, "<%s:%d> Error getgrgid(%u): %s\n", __func__, __LINE__, conf->server_gid, strerror(errno));
                 return -1;
             }
         }
         else
         {
-            struct group *groupbuf = getgrnam(cfg.group);
+            struct group *groupbuf = getgrnam(conf->group);
             if (!groupbuf)
             {
-                fprintf(stderr, "<%s:%d> Error getgrnam(%s): %s\n", __func__, __LINE__, cfg.group, strerror(errno));
+                fprintf(stderr, "<%s:%d> Error getgrnam(%s): %s\n", __func__, __LINE__, conf->group, strerror(errno));
                 return -1;
             }
-            cfg.server_gid = groupbuf->gr_gid;
+            c.server_gid = groupbuf->gr_gid;
         }
         //--------------------------------------------------------------
-        if (cfg.server_uid != uid)
+        if (conf->server_uid != uid)
         {
-            if (setuid(cfg.server_uid) == -1)
+            if (setuid(conf->server_uid) == -1)
             {
-                fprintf(stderr, "<%s:%d> Error setuid(%u): %s\n", __func__, __LINE__, cfg.server_uid, strerror(errno));
+                fprintf(stderr, "<%s:%d> Error setuid(%u): %s\n", __func__, __LINE__, conf->server_uid, strerror(errno));
                 return -1;
             }
         }
     }
     else
     {
-        cfg.server_uid = getuid();
-        cfg.server_gid = getgid();
+        c.server_uid = getuid();
+        c.server_gid = getgid();
     }
 
     return 0;
@@ -626,10 +632,10 @@ int set_uid()
 void free_fcgi_list()
 {
     fcgi_list_addr *prev;
-    while (cfg.fcgi_list)
+    while (c.fcgi_list)
     {
-        prev = cfg.fcgi_list;
-        cfg.fcgi_list = cfg.fcgi_list->next;
+        prev = c.fcgi_list;
+        c.fcgi_list = c.fcgi_list->next;
         if (prev)
         {
             free(prev->scrpt_name);
@@ -659,9 +665,4 @@ int read_conf_file(const char *path_conf)
         free_fcgi_list();
     fclose(f);
     return n;
-}
-//======================================================================
-void set_sndbuf(int n)
-{
-    cfg.SNDBUF_SIZE = n;
 }

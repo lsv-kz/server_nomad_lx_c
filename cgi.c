@@ -355,20 +355,20 @@ int cgi_fork(Connect *req)
         setenv("REQUEST_URI", req->uri, 1);
         setenv("REQUEST_METHOD", get_str_method(req->reqMethod), 1);
         setenv("SERVER_PROTOCOL", get_str_http_prot(req->httpProt), 1);
-        if(req->iHost >= 0)
-            setenv("HTTP_HOST", req->reqHeadersValue[req->iHost], 1);
-        if(req->iReferer >= 0)
-            setenv("HTTP_REFERER", req->reqHeadersValue[req->iReferer], 1);
-        if(req->iUserAgent >= 0)
-            setenv("HTTP_USER_AGENT", req->reqHeadersValue[req->iUserAgent], 1);
+        if(req->req_hd.iHost >= 0)
+            setenv("HTTP_HOST", req->reqHeadersValue[req->req_hd.iHost], 1);
+        if(req->req_hd.iReferer >= 0)
+            setenv("HTTP_REFERER", req->reqHeadersValue[req->req_hd.iReferer], 1);
+        if(req->req_hd.iUserAgent >= 0)
+            setenv("HTTP_USER_AGENT", req->reqHeadersValue[req->req_hd.iUserAgent], 1);
         setenv("SCRIPT_NAME", req->scriptName, 1);
         setenv("SCRIPT_FILENAME", str_ptr(req->path), 1);
         if(req->reqMethod == M_POST)
         {
-            if(req->iReqContentType >= 0)
-                setenv("CONTENT_TYPE", req->reqHeadersValue[req->iReqContentType], 1);
-            if(req->iContentLength >= 0)
-                setenv("CONTENT_LENGTH", req->reqHeadersValue[req->iContentLength], 1);
+            if(req->req_hd.iReqContentType >= 0)
+                setenv("CONTENT_TYPE", req->reqHeadersValue[req->req_hd.iReqContentType], 1);
+            if(req->req_hd.iContentLength >= 0)
+                setenv("CONTENT_LENGTH", req->reqHeadersValue[req->req_hd.iContentLength], 1);
         }
 
         setenv("QUERY_STRING", req->sReqParam ? req->sReqParam : "", 1);
@@ -421,14 +421,14 @@ int cgi_fork(Connect *req)
                     close(serv_cgi[1]);
                     return kill_script(req, pid, RS500, "2");
                 }
-                req->reqContentLength -= wr_bytes;
+                req->req_hd.reqContentLength -= wr_bytes;
             }
             
-            wr_bytes = client_to_script(req->clientSocket, serv_cgi[1], &req->reqContentLength, req->numReq);
+            wr_bytes = client_to_script(req->clientSocket, serv_cgi[1], &req->req_hd.reqContentLength, req->numReq);
             if(wr_bytes < 0)
             {
-                if (req->reqContentLength > 0 && req->reqContentLength < conf->ClientMaxBodySize)
-                    client_to_cosmos(req->clientSocket, (long)req->reqContentLength);
+                if (req->req_hd.reqContentLength > 0 && req->req_hd.reqContentLength < conf->ClientMaxBodySize)
+                    client_to_cosmos(req->clientSocket, (long)req->req_hd.reqContentLength);
 
                 print__err(req, "<%s:%d> Error client_to_script() = %d\n", __func__, __LINE__, wr_bytes);
                 close(cgi_serv[0]);
@@ -468,21 +468,21 @@ int cgi(Connect *req)
 
     if (req->reqMethod == M_POST)
     {
-        if (req->iReqContentType < 0)
+        if (req->req_hd.iReqContentType < 0)
         {
             print__err(req, "<%s:%d> Content-Type \?\n", __func__, __LINE__);
             return -RS400;
         }
 
-        if (req->reqContentLength < 0)
+        if (req->req_hd.reqContentLength < 0)
         {
             print__err(req, "<%s:%d> 411 Length Required\n", __func__, __LINE__);
             return -RS411;
         }
 
-        if (req->reqContentLength > conf->ClientMaxBodySize)
+        if (req->req_hd.reqContentLength > conf->ClientMaxBodySize)
         {
-            print__err(req, "<%s:%d> 413 Request entity too large: %lld\n", __func__, __LINE__, req->reqContentLength);
+            print__err(req, "<%s:%d> 413 Request entity too large: %lld\n", __func__, __LINE__, req->req_hd.reqContentLength);
             return -RS413;
         }
     }

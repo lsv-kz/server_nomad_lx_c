@@ -34,11 +34,16 @@
 #include <sys/un.h>
 #include <sys/resource.h>
 
-#define     MAX_PATH           4096
-#define     MAX_NAME            256
-#define     LEN_BUF_REQUEST    8192
-#define     MAX_HEADERS          25
-#define     NO_PRINT_LOG      -1000
+#define    LINUX_ 
+//#define    FREEBSD_ 
+#define    SEND_FILE_
+#define    TCP_CORK_
+
+#define    MAX_PATH           4096
+#define    MAX_NAME            256
+#define    LEN_BUF_REQUEST    8192
+#define    MAX_HEADERS          25
+#define    NO_PRINT_LOG      -1000
 
 typedef struct fcgi_list_addr {
     char *scrpt_name;
@@ -79,146 +84,140 @@ typedef struct {
     long long len;
 } Range;
 //======================================================================
-struct Config
+typedef struct Config
 {
+    char ServerSoftware[48];
     char host[128];
     char servPort[16];
-    char ServerSoftware[48];
 
+    char rootDir[MAX_PATH];
+    char cgiDir[MAX_PATH];
+    char logDir[MAX_PATH];
+
+    char UsePHP[16];
+    char PathPHP[MAX_PATH];
+
+    int ListenBacklog;
     char tcp_cork;
-
     char TcpNoDelay;
+
+    char SEND_FILE;
+    long SEND_FILE_SIZE_PART;
+    int SNDBUF_SIZE;
+    int MAX_SND_FD;
+    int MAX_REQUESTS;
 
     int NumProc;
     int MaxThreads;
     int MinThreads;
     int MaxRequestsPerThr;
-
-    int SNDBUF_SIZE;
-
-    char SEND_FILE;
-
-    int MAX_SND_FD;
-    int TIMEOUT_POLL;
-
     int MaxProcCgi;
 
-    int ListenBacklog;
-
-    int MAX_REQUESTS;
-
     char KeepAlive;
+    int TIMEOUT_POLL;
     int TimeoutKeepAlive;
     int TimeOut;
     int TimeoutCGI;
 
     int MaxRanges;
 
-    char rootDir[MAX_PATH];
-    char cgiDir[MAX_PATH];
-    char logDir[MAX_PATH];
-
     long int ClientMaxBodySize;
 
-    char UsePHP[16];
-    char PathPHP[MAX_PATH];
-
-    fcgi_list_addr *fcgi_list;
+    char ShowMediaFiles;
 
     char index_html;
     char index_php;
     char index_pl;
     char index_fcgi;
 
-    char ShowMediaFiles;
-
+    char user[32];
+    char group[32];
     uid_t server_uid;
     gid_t server_gid;
 
-    char user[32];
-    char group[32];
-};
+    fcgi_list_addr *fcgi_list;
+} Config;
 
 extern const struct Config* const conf;
 //======================================================================
-typedef struct hdr {
-    char *ptr;
-    int len;
-} hdr;
-
+typedef struct 
+{
+    int  iConnection;
+    int  iHost;
+    int  iUserAgent;
+    int  iReferer;
+    int  iUpgrade;
+    int  iReqContentType;
+    int  iContentLength;
+    int  iAcceptEncoding;
+    int  iRange;
+    int  iIf_Range;
+    long long reqContentLength;
+} ReqHd;
+//----------------------------------------------------------------------
 typedef struct Connect{
     struct Connect *prev;
     struct Connect *next;
-    
-    unsigned int numProc, numReq, numConn;
-    int       serverSocket;
-    int       serverPort;
-    int       clientSocket;
-    
-    time_t    sock_timer;
-    int       timeout;
-    int       event;
-    int       first_snd;
-    
-    int       err;
-    char      remoteAddr[64];
-    
-    char      bufReq[LEN_BUF_REQUEST]; 
-    
-    int       i_bufReq;
-    char      *p_newline;
-    char      *tail;
-    int       lenTail;
-    
-    int       reqMethod;
 
-    char      *uri;
+    unsigned int numProc, numReq, numConn;
+    int  serverSocket;
+    int  serverPort;
+    int  clientSocket;
+
+    time_t sock_timer;
+    int  timeout;
+    int  event;
+    int  first_snd;
+
+    int  err;
+    char remoteAddr[64];
+
+    char bufReq[LEN_BUF_REQUEST]; 
+
+    int  i_bufReq;
+    char *p_newline;
+    char *tail;
+    int  lenTail;
+
+    int  reqMethod;
+
+    char *uri;
     unsigned int uriLen;
-    
-    char      decodeUri[LEN_BUF_REQUEST];
+
+    char decodeUri[LEN_BUF_REQUEST];
     unsigned int lenDecodeUri;
     //------------------------------------------------------------------
-    char      *sReqParam;
-    char      *sRange;
-    int       httpProt;
+    char *sReqParam;
+    char *sRange;
+    int  httpProt;
 
-    int       connKeepAlive;
+    int  connKeepAlive;
 
-    int       iConnection;
-    int       iHost;
-    int       iUserAgent;
-    int       iReferer;
-    int       iUpgrade;
-    int       iReqContentType;
-    int       iContentLength;
-    int       iAcceptEncoding;
-    int       iRange;
-    int       iIf_Range;
-    
-    long long reqContentLength;
-    int       countReqHeaders;
-    char      *reqHeadersName[MAX_HEADERS + 1];
-    const char      *reqHeadersValue[MAX_HEADERS + 1];
-    
-    const char  *scriptName;
-    String    *path;
-    int       sizePath;
-    
-    int       scriptType;
-    int       respStatus;
-    char      sLogTime[64];
-    
+    ReqHd req_hd;
+
+    int  countReqHeaders;
+    char *reqHeadersName[MAX_HEADERS + 1];
+    const char *reqHeadersValue[MAX_HEADERS + 1];
+
+    const char *scriptName;
+    String *path;
+    int  sizePath;
+
+    int  scriptType;
+    int  respStatus;
+    char sLogTime[64];
+
     long long fileSize;
     long long respContentLength;
-    const char  *respContentType;
-    
-    int       countRespHeaders;
-    
-    Range     *rangeBytes;
-    int       numPart;
-    
-    int       fd;
-    off_t     offset;
+    const char *respContentType;
+
+    int  countRespHeaders;
+
+    Range *rangeBytes;
+    int  numPart;
+
+    int  fd;
+    off_t offset;
     long long send_bytes;
 } Connect;
 //----------------------------------------------------------------------
@@ -264,7 +263,7 @@ int hd_read(Connect *req);
 int empty_line(Connect *req);
 
 int send_fd(int unix_sock, int fd, void *data, int size_data);
-int recv_fd(int unix_sock, int num_chld, void *data, int size_data);
+int recv_fd(int unix_sock, int num_chld, void *data, int *size_data);
 //----------------------------------------------------------------------
 void get_time_run(int a, int b, struct timeval *time1, struct timeval *time2);
 void send_message(Connect *req, String *hdrs, const char *msg);

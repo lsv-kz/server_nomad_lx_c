@@ -154,9 +154,9 @@ void end_response(Connect *req)
 {
     if (req->connKeepAlive == 0 || req->err < 0)
     { // ----- Close connect -----
-        if (req->err > NO_PRINT_LOG)
+        if (req->err > NO_PRINT_LOG)// NO_PRINT_LOG(-1000) < err < 0
         {
-            if (req->err < -1)
+            if (req->err < -1)      // NO_PRINT_LOG(-1000) < err < -1
             {
                 req->respStatus = -req->err;
                 send_message(req, NULL, "");
@@ -180,12 +180,18 @@ void end_response(Connect *req)
     }
     else
     { // ----- KeepAlive -----
+    #ifdef TCP_CORK_
         if (conf->tcp_cork == 'y')
         {
+        #if defined(LINUX_)
             int optval = 0;
             setsockopt(req->clientSocket, SOL_TCP, TCP_CORK, &optval, sizeof(optval));
+        #elif defined(FREEBSD_)
+            int optval = 0;
+            setsockopt(req->clientSocket, IPPROTO_TCP, TCP_NOPUSH, &optval, sizeof(optval));
+        #endif
         }
-
+    #endif
         print_log(req);
         req->timeout = conf->TimeoutKeepAlive;
         ++req->numReq;
@@ -264,6 +270,7 @@ static void signal_handler(int sig)
         //print_err("[%d] <%s:%d> ### SIGINT ###\n", nProc, __func__, __LINE__);
         shutdown(servSock, SHUT_RDWR);
         close(servSock);
+        shutdown(uxSock, SHUT_RDWR);
         close(uxSock);
     }
     else if (sig == SIGSEGV)
@@ -340,8 +347,8 @@ int manager(int sockServer, int numProc, int to_parent)
         exit(1);
     }
 
-    printf("[%d:%s:%d] +++++ num threads=%d, pid=%d, uid=%d, gid=%d +++++\n", numProc, __func__, 
-                                __LINE__, get_num_thr(), getpid(), getuid(), getgid());
+    printf("[%d] +++++ num threads=%d, pid=%d, uid=%d, gid=%d +++++\n", numProc,
+                                get_num_thr(), getpid(), getuid(), getgid());
     all_thr = num_thr;
     par[0] = numProc;
     //------------------------------------------------------------------
@@ -364,7 +371,7 @@ int manager(int sockServer, int numProc, int to_parent)
         struct sockaddr_storage clientAddr;
         socklen_t addrSize = sizeof(struct sockaddr_storage);
 
-        int clientSocket = recv_fd(unixSock, numProc, &clientAddr, addrSize);
+        int clientSocket = recv_fd(unixSock, numProc, &clientAddr, (int*)&addrSize);
         if (clientSocket < 0)
         {
             print_err("[%d]<%s:%d> Error recv_fd()\n", numProc, __func__, __LINE__);
@@ -390,20 +397,19 @@ int manager(int sockServer, int numProc, int to_parent)
         req->clientSocket = clientSocket;
         req->timeout = conf->TimeOut;
         req->remoteAddr[0] = '\0';
-        getnameinfo((struct sockaddr *)&clientAddr, 
+        n = getnameinfo((struct sockaddr *)&clientAddr, 
                 addrSize, 
                 req->remoteAddr, 
                 sizeof(req->remoteAddr),
                 NULL, 
                 0, 
                 NI_NUMERICHOST);
+        if (n != 0)
+            print__err(req, "<%s> Error getnameinfo()=%d: %s\n", __func__, n, gai_strerror(n));
 
         start_conn();
         push_pollin_list(req);
     }
-
-    print_err("<%d> thr=%d, allThr=%d, open_conn=%d, allConn=%d\n", numProc, count_thr, all_thr, count_conn, allConn);
-    i = count_thr;
 
     close_manager();
     pthread_join(thr_man, NULL);

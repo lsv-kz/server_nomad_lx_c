@@ -99,7 +99,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
         "     margin-left:100px; margin-right:50px;\n"
         "    }\n"
         "  </style>\n"
-        "  <link href=\"/styles.css\" type=\"text/css\" rel=\"stylesheet\">"
+        "  <link href=\"/styles.css\" type=\"text/css\" rel=\"stylesheet\">\n"
         " </head>\n"
         " <body id=\"top\">\n"
         "  <h3>Index of ", 

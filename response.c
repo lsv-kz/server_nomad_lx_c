@@ -42,12 +42,19 @@ void response1(int num_chld)
             }
         }
         //--------------------------------------------------------------
+    #ifdef TCP_CORK_
         if (conf->tcp_cork == 'y')
         {
+        #if defined(LINUX_)
             int optval = 1;
             setsockopt(req->clientSocket, SOL_TCP, TCP_CORK, &optval, sizeof(optval));
+        #elif defined(FREEBSD_)
+            int optval = 1;
+            setsockopt(req->clientSocket, IPPROTO_TCP, TCP_NOPUSH, &optval, sizeof(optval));
+        #endif
         }
-        /*--------------------------------------------------------*/
+    #endif
+        //--------------------------------------------------------------
         if ((req->httpProt == HTTP09) || (req->httpProt == HTTP2))
         {
             req->connKeepAlive = 0;
@@ -57,7 +64,7 @@ void response1(int num_chld)
 
         if (req->numReq >= conf->MaxRequestsPerThr || (conf->KeepAlive == 'n') || (req->httpProt == HTTP10))
             req->connKeepAlive = 0;
-        else if (req->iConnection == -1)
+        else if (req->req_hd.iConnection == -1)
             req->connKeepAlive = 1;
 
         if ((p = strchr(req->uri, '?')))
@@ -95,9 +102,9 @@ void response1(int num_chld)
             goto end;
         }
 
-        if (req->iUpgrade >= 0)
+        if (req->req_hd.iUpgrade >= 0)
         {
-            print__err(req, "<%s:%d> req->upgrade: %s\n",  __func__, __LINE__, req->reqHeadersValue[req->iUpgrade]);
+            print__err(req, "<%s:%d> req->upgrade: %s\n",  __func__, __LINE__, req->reqHeadersValue[req->req_hd.iUpgrade]);
             req->connKeepAlive = 0;
             req->err = -RS505;
             goto end;
@@ -416,7 +423,7 @@ int response2(Connect *req)
     req->numPart = 0;
     req->respContentType = content_type(str_ptr(req->path));
 
-    if (req->iRange >= 0)
+    if (req->req_hd.iRange >= 0)
     {
         int ret = get_ranges(req);
         if (ret < 0)

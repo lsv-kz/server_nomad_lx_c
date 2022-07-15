@@ -1,6 +1,6 @@
 #include "server.h"
 #include <poll.h>
-
+#include <sys/uio.h>
 //    #define POLLIN      0x0001    /* Можно считывать данные */
 //    #define POLLPRI     0x0002    /* Есть срочные данные */
 //    #define POLLOUT     0x0004    /* Запись не будет блокирована */
@@ -13,7 +13,7 @@ int read_timeout(int fd, char *buf, int len, int timeout)
     int read_bytes = 0, ret, tm;
     struct pollfd fdrd;
     char *p;
-    
+
     tm = (timeout == -1) ? -1 : (timeout * 1000);
 
     fdrd.fd = fd;
@@ -59,7 +59,7 @@ int read_timeout(int fd, char *buf, int len, int timeout)
             return -1;
         }
     }
-    
+
     return read_bytes;
 }
 //======================================================================
@@ -67,7 +67,7 @@ int write_timeout(int fd, const char *buf, int len, int timeout)
 {
     int write_bytes = 0, ret;
     struct pollfd fdwr;
-    
+
     fdwr.fd = fd;
     fdwr.events = POLLOUT;
 
@@ -86,13 +86,13 @@ int write_timeout(int fd, const char *buf, int len, int timeout)
             print_err("<%s:%d> TimeOut poll(), tm=%d\n", __func__, __LINE__, timeout);
             return -1;
         }
-        
+
         if (fdwr.revents != POLLOUT)
         {
             print_err("<%s:%d> 0x%02x\n", __func__, __LINE__, fdwr.revents);
             return -1;
         }
-        
+
         ret = write(fd, buf, len);
         if (ret == -1)
         {
@@ -259,7 +259,7 @@ int fcgi_read_stderr(int fd_in, int cont_len, int timeout)
         write(STDERR_FILENO, buf, rd);
         wr_bytes += rd;
     }
-    
+
     write(STDERR_FILENO, "\n", 1);
     return wr_bytes;
 }
@@ -267,7 +267,7 @@ int fcgi_read_stderr(int fd_in, int cont_len, int timeout)
 int send_file_ux(int fd_out, int fd_in, char *buf, int *size, off_t offset, long long *cont_len)
 {
     int rd, wr, ret = 0;
-    
+
     lseek(fd_in, offset, SEEK_SET);
 
     for ( ; *cont_len > 0; )
@@ -276,7 +276,7 @@ int send_file_ux(int fd_out, int fd_in, char *buf, int *size, off_t offset, long
             rd = read(fd_in, buf, *cont_len);
         else
             rd = read(fd_in, buf, *size);
-        
+
         if(rd == -1)
         {
             print_err("<%s:%d> Error read(): %s\n", __func__,
@@ -299,7 +299,7 @@ int send_file_ux(int fd_out, int fd_in, char *buf, int *size, off_t offset, long
             ret = -1;
             break;
         }
-        
+
         *cont_len -= wr;
     }
 
@@ -315,7 +315,7 @@ int hd_read(Connect *req)
         return NO_PRINT_LOG;
 
     req->lenTail += n;
-        
+
     req->i_bufReq += n;
     req->bufReq[req->i_bufReq] = 0;
 
@@ -326,7 +326,7 @@ int hd_read(Connect *req)
     }
     else if (n < 0)
         return n;
-        
+
     return 0;
 }
 //======================================================================
@@ -415,19 +415,20 @@ int send_fd(int unix_sock, int fd, void *data, int size_data)
     ssize_t ret;
     char buf[CMSG_SPACE(sizeof(int))];
     memset(buf, 0, sizeof(buf));
-    
+
     msgh.msg_name = NULL;
     msgh.msg_namelen = 0;
-    
+
     msgh.msg_iov = &iov;
     msgh.msg_iovlen = 1;
     iov.iov_base = data;
     iov.iov_len = size_data;
-    
+
     if (fd != -1)
     {
         msgh.msg_control = buf;
         msgh.msg_controllen = sizeof(buf);
+
         struct cmsghdr *cmsgp = CMSG_FIRSTHDR(&msgh);
         cmsgp->cmsg_len = CMSG_LEN(sizeof(int));
         cmsgp->cmsg_level = SOL_SOCKET;
@@ -439,44 +440,49 @@ int send_fd(int unix_sock, int fd, void *data, int size_data)
         msgh.msg_control = NULL;
         msgh.msg_controllen = 0;
     }
-    
+
     ret = sendmsg(unix_sock, &msgh, 0);
     if (ret == -1)
     {
-        print_err("<%s:%d> Error sendmsg(): %s\n", __func__, __LINE__, strerror(errno));
+        if (errno == ENOBUFS)
+            ret = -ENOBUFS;
+        else
+            print_err("<%s:%d> Error sendmsg(): %s\n", __func__, __LINE__, strerror(errno));
     }
-    
+
     return ret;
 }
 //======================================================================
-int recv_fd(int unix_sock, int num_chld, void *data, int size_data)
+int recv_fd(int unix_sock, int num_chld, void *data, int *size_data)
 {
     int fd;
     struct msghdr msgh;
     struct iovec iov;
-    ssize_t nr;
+    ssize_t ret;
     char buf[CMSG_SPACE(sizeof(int))];
-    
+
     msgh.msg_name = NULL;
     msgh.msg_namelen = 0;
 
     msgh.msg_iov = &iov;
     msgh.msg_iovlen = 1;
     iov.iov_base = data;
-    iov.iov_len = size_data;
-    
+    iov.iov_len = *size_data;
+
     msgh.msg_control = buf;
     msgh.msg_controllen = sizeof(buf);
-    
-    nr = recvmsg(unix_sock, &msgh, 0);
-    if (nr == -1)
+
+    ret = recvmsg(unix_sock, &msgh, 0);
+    if (ret <= 0)
     {
-        print_err("[%d]<%s:%d> Error recvmsg(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
+        if (ret < 0)
+            print_err("[%d]<%s:%d> Error recvmsg(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
         return -1;
     }
-    
-    struct cmsghdr *cmsgp = CMSG_FIRSTHDR(&msgh);
 
+    *size_data = ret;
+
+    struct cmsghdr *cmsgp = CMSG_FIRSTHDR(&msgh);
     if (cmsgp == NULL || cmsgp->cmsg_len != CMSG_LEN(sizeof(int)))
     {
         print_err("[%d]<%s:%d> bad cmsg header\n", num_chld, __func__, __LINE__);

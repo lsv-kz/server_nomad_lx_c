@@ -555,7 +555,7 @@ int parse_startline_request(Connect *req, char *s)
         return -1;
     }
     char *p = s, *p_val;
-    //----------------------------- method -----------------------------
+    //------------------------------ method ----------------------------
     if (*p == ' ')
         return -RS400;
     p_val = p;
@@ -617,13 +617,13 @@ int parse_headers(Connect *req, char *pName, int i)
         print__err(req, "<%s:%d> Error: header is empty\n",  __func__, __LINE__);
         return -1;
     }
-    
+
     if (req->httpProt == HTTP09)
     {
         print__err(req, "<%s:%d> Error version protocol\n", __func__, __LINE__);
         return -1;
     }
-    
+
     char *pVal = pName, ch;
     int colon = 0;
     while ((ch = *pVal))
@@ -647,32 +647,32 @@ int parse_headers(Connect *req, char *pName, int i)
     //------------------------------------------------------------------
     if (!strcmp(pName, "accept-encoding:"))
     {
-        req->iAcceptEncoding = i;
+        req->req_hd.iAcceptEncoding = i;
     }
     else if (!strcmp(pName, "connection:"))
     {
-        req->iConnection = i;
-        if(strstr_case(pVal, "keep-alive"))
+        req->req_hd.iConnection = i;
+        if (strstr_case(pVal, "keep-alive"))
             req->connKeepAlive = 1;
         else
             req->connKeepAlive = 0;
     }
     else if (!strcmp(pName, "content-length:"))
     {
-        req->reqContentLength = atoll(pVal);
-        req->iContentLength = i;
+        req->req_hd.reqContentLength = atoll(pVal);
+        req->req_hd.iContentLength = i;
     }
     else if (!strcmp(pName, "content-type:"))
     {
-        req->iReqContentType = i;
+        req->req_hd.iReqContentType = i;
     }
     else if (!strcmp(pName, "host:"))
     {
-        req->iHost = i;
+        req->req_hd.iHost = i;
     }
     else if (!strcmp(pName, "if-range:"))
     {
-        req->iIf_Range = i;
+        req->req_hd.iIf_Range = i;
     }
     else if (!strcmp(pName, "range:"))
     {
@@ -681,19 +681,19 @@ int parse_headers(Connect *req, char *pName, int i)
             req->sRange = p + 1;
         else
             req->sRange = NULL;
-        req->iRange = i;
+        req->req_hd.iRange = i;
     }
     else if (!strcmp(pName, "referer:"))
     {
-        req->iReferer = i;
+        req->req_hd.iReferer = i;
     }
     else if (!strcmp(pName, "upgrade:"))
     {
-        req->iUpgrade = i;
+        req->req_hd.iUpgrade = i;
     }
     else if (!strcmp(pName, "user-agent:"))
     {
-        req->iUserAgent = i;
+        req->req_hd.iUserAgent = i;
     }
 
     req->reqHeadersValue[i] = pVal;

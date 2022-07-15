@@ -1,5 +1,10 @@
 #include "server.h"
-#include <sys/sendfile.h>
+
+#if defined(LINUX_)
+    #include <sys/sendfile.h>
+#elif defined(FREEBSD_)
+    #include <sys/uio.h>
+#endif
 
 static Connect *recv_start = NULL;
 static Connect *recv_end = NULL;
@@ -27,33 +32,68 @@ int send_part_file(Connect *req, char *buf, int size_buf)
 {
     int rd, wr, len;
     errno = 0;
-    
+
     if (req->respContentLength == 0)
         return 0;
-    
-    if (req->respContentLength >= size_buf)
-        len = size_buf;
-    else
-        len = req->respContentLength;
-    
+#if defined(SEND_FILE_) && (defined(LINUX_) || defined(FREEBSD_))
     if (conf->SEND_FILE == 'y')
     {
+        if (req->respContentLength >= size_buf)
+            len = size_buf;
+        else
+            len = req->respContentLength;
+    #if defined(LINUX_)
         wr = sendfile(req->clientSocket, req->fd, &req->offset, len);
         if (wr == -1)
         {
             if (errno == EAGAIN)
                 return -EAGAIN;
-            print_err("<%s:%d> Error sendfile(); %s\n", __func__, __LINE__, strerror(errno));
+            print__err(req, "<%s:%d> Error sendfile(); %s\n", __func__, __LINE__, strerror(errno));
             return wr;
         }
+    #elif defined(FREEBSD_)
+        off_t wr_bytes;
+        int ret = sendfile(req->fd, req->clientSocket, req->offset, len, NULL, &wr_bytes, SF_NOCACHE);// SF_NODISKIO 
+        if (ret == -1)
+        {
+            if (errno == EAGAIN)
+            {
+                if (wr_bytes == 0)
+                    return -EAGAIN;
+                req->offset += wr_bytes;
+                wr = wr_bytes;
+            }
+            else
+            {
+                print__err(req, "<%s:%d> Error sendfile(); %s\n", __func__, __LINE__, strerror(errno));
+                return -1;
+            }
+        }
+        else if (ret == 0)
+        {
+            req->offset += wr_bytes;
+            wr = wr_bytes;
+        }
+        else
+        {
+            print__err(req, "<%s:%d> Error sendfile(): ret=%d, wr_bytes=%ld\n", __func__, __LINE__, ret, wr_bytes);
+            return -1;
+        }
+    #endif
     }
     else
+#endif
     {
+        if (req->respContentLength >= size_buf)
+            len = size_buf;
+        else
+            len = req->respContentLength;
+
         rd = read(req->fd, buf, len);
         if (rd <= 0)
         {
             if (rd == -1)
-                print_err("<%s:%d> Error read(): %s\n", __func__, __LINE__, strerror(errno));
+                print__err(req, "<%s:%d> Error read(): %s\n", __func__, __LINE__, strerror(errno));
             return rd;
         }
 
@@ -65,15 +105,13 @@ int send_part_file(Connect *req, char *buf, int size_buf)
                 lseek(req->fd, -rd, SEEK_CUR);
                 return -EAGAIN;
             }
-            print_err("<%s:%d> Error write(); %s\n", __func__, __LINE__, strerror(errno));
+            print__err(req, "<%s:%d> Error write(); %s\n", __func__, __LINE__, strerror(errno));
             return wr;
         }
         else if (rd != wr)
-        {
             lseek(req->fd, wr - rd, SEEK_CUR);
-        }
     }
-    
+
     req->send_bytes += wr;
     req->respContentLength -= wr;
     if (req->respContentLength == 0)
@@ -186,8 +224,8 @@ pthread_mutex_unlock(&mtx_);
             else
                 r->err = NO_PRINT_LOG;
             print__err(r, "<%s:%d> Timeout = %ld\n", __func__, __LINE__, t - r->sock_timer);
-            r->iReferer = MAX_HEADERS - 1;
-            r->reqHeadersValue[r->iReferer] = "Timeout";
+            r->req_hd.iReferer = MAX_HEADERS - 1;
+            r->reqHeadersValue[r->req_hd.iReferer] = "Timeout";
             
             del_from_list(r);
             end_response(r);
@@ -223,8 +261,8 @@ pthread_mutex_unlock(&mtx_);
         {
             r->err = -1;
             print__err(r, "<%s:%d> Timeout = %ld\n", __func__, __LINE__, t - r->sock_timer);
-            r->iReferer = MAX_HEADERS - 1;
-            r->reqHeadersValue[r->iReferer] = "Timeout";
+            r->req_hd.iReferer = MAX_HEADERS - 1;
+            r->reqHeadersValue[r->req_hd.iReferer] = "Timeout";
 
             del_from_list(r);
             end_response(r);
@@ -270,12 +308,14 @@ void *event_handler(void *arg)
     int num_chld = *((int*)arg);
     int count_resp = 0;
     int ret = 1, n, wr;
-    int size_buf = conf->SNDBUF_SIZE;
+    int size_buf = conf->SEND_FILE_SIZE_PART;
     char *rd_buf = NULL;
     num_proc_ = num_chld;
-    
+#if defined(SEND_FILE_) && (defined(LINUX_) || defined(FREEBSD_))
     if (conf->SEND_FILE != 'y')
+#endif
     {
+        size_buf = conf->SNDBUF_SIZE;
         rd_buf = malloc(size_buf);
         if (!rd_buf)
         {
@@ -283,14 +323,14 @@ void *event_handler(void *arg)
             exit(1);
         }
     }
-    
+
     struct pollfd *fdwr = malloc(sizeof(struct pollfd) * conf->MAX_REQUESTS);
     if (!fdwr)
     {
         print_err("[%d]<%s:%d> Error malloc(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
         exit(1);
     }
-    
+
     arr_conn = malloc(sizeof(Connect*) * conf->MAX_REQUESTS);
     if (!arr_conn)
     {
@@ -306,7 +346,7 @@ pthread_mutex_lock(&mtx_);
         {
             pthread_cond_wait(&cond_, &mtx_);
         }
-        
+
 pthread_mutex_unlock(&mtx_);
         
         if (close_thr)
@@ -315,7 +355,7 @@ pthread_mutex_unlock(&mtx_);
         count_resp = set_list(fdwr);
         if (count_resp == 0)
             continue;
-        
+
         ret = poll(fdwr, count_resp, conf->TIMEOUT_POLL);
         if (ret == -1)
         {
@@ -326,7 +366,7 @@ pthread_mutex_unlock(&mtx_);
         {
             continue;
         }
-        
+
         Connect *r = NULL;
         for ( int i = 0; (i < count_resp) && (ret > 0); ++i)
         {
@@ -343,8 +383,8 @@ pthread_mutex_unlock(&mtx_);
                 else if (wr == -1)
                 {
                     r->err = wr;
-                    r->iReferer = MAX_HEADERS - 1;
-                    r->reqHeadersValue[r->iReferer] = "Connection reset by peer";
+                    r->req_hd.iReferer = MAX_HEADERS - 1;
+                    r->reqHeadersValue[r->req_hd.iReferer] = "Connection reset by peer";
                         
                     del_from_list(r);
                     end_response(r);
@@ -386,9 +426,12 @@ pthread_mutex_unlock(&mtx_);
             }
         }
     }
-    print_err("[%d]<%s:%d> *** Exit send_files() ***\n", num_chld, __func__, __LINE__);
+
+#if defined(SEND_FILE_) && (defined(LINUX_) || defined(FREEBSD_))
     if (conf->SEND_FILE != 'y')
-        free(rd_buf);
+#endif
+        if (rd_buf)
+            free(rd_buf);
     free(fdwr);
     free(arr_conn);
     return NULL;
@@ -410,7 +453,6 @@ pthread_mutex_lock(&mtx_);
     }
     else
         snd_new_start = snd_new_end = req;
-    //++num_new_snd;
 pthread_mutex_unlock(&mtx_);
     pthread_cond_signal(&cond_);
 }
@@ -431,7 +473,6 @@ pthread_mutex_lock(&mtx_);
     }
     else
         recv_new_start = recv_new_end = req;
-    
 pthread_mutex_unlock(&mtx_);
     pthread_cond_signal(&cond_);
 }
@@ -447,7 +488,6 @@ void init_struct_request(Connect *req)
     req->bufReq[0] = '\0';
     req->decodeUri[0] = '\0';
     req->sLogTime[0] = '\0';
-
     req->uri = NULL;
     req->p_newline = req->bufReq;
     req->sReqParam = NULL;
@@ -455,48 +495,27 @@ void init_struct_request(Connect *req)
     req->reqHeadersValue[0] = NULL;
     req->path = NULL;
     req->scriptName = NULL;
-
     req->i_bufReq = 0;
     req->lenTail = 0;
-    
     req->sizePath = 0;
     req->reqMethod = 0;
     req->uriLen = 0;
     req->lenDecodeUri = 0;
     req->httpProt = 0;
     req->connKeepAlive = 0;
-
     req->err = 0;
-    req->iConnection = -1;
-    req->iHost = -1;
-    req->iUserAgent = -1;
-    req->iReferer = -1;
-    req->iUpgrade = -1;
-    req->iReqContentType = -1;
-    req->iContentLength = -1;
-    req->iAcceptEncoding = -1;
-    req->iRange = -1;
-    req->iIf_Range = -1;
-
+    req->req_hd = (ReqHd){-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1LL};
     req->countReqHeaders = 0;
-    //--------------------------------
     req->scriptType = 0;
-    req->reqContentLength = -1LL;
     req->fileSize = -1LL;
-
     req->respStatus = 0;
     req->respContentLength = -1LL;
-
     req->respContentType = NULL;
-    
     req->countRespHeaders = 0;
-    //------------------------------
     req->send_bytes = 0LL;
-
     req->numPart = 0;
     req->sRange = NULL;
     req->rangeBytes = NULL;
-    
     req->fd = -1;
     req->offset = 0;
 }

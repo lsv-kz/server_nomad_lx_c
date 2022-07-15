@@ -145,9 +145,6 @@ void create_html(Connect *req, String *s, const char *msg)
 //======================================================================
 void send_message(Connect *req, String *hdrs, const char *msg)
 {
-    if(!msg)
-        msg = (char*)"";
-
     req->respContentType = "text/html";
     if(req->respStatus == RS204)
     {

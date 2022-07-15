@@ -25,6 +25,7 @@ String str_init(unsigned int n)
 //======================================================================
 void str_free(String *s)
 {
+    if (!s) return;
     if (s->ptr)
     {
         free(s->ptr);
@@ -35,6 +36,7 @@ void str_free(String *s)
 //======================================================================
 static void reserve(String *s, unsigned int n)
 {
+    if (!s) return;
     if ((n <= s->size) || s->err)
     {
         if (n < s->size) s->err = 1;
@@ -59,6 +61,7 @@ static void reserve(String *s, unsigned int n)
 //======================================================================
 void str_clear(String *s)
 {
+    if (!s) return;
     s->size = s->len = s->err = 0;
     if (s->ptr)
     {
@@ -69,30 +72,16 @@ void str_clear(String *s)
 //======================================================================
 void str_resize(String *s, unsigned int n)
 {
+    if (!s) return;
     if (s->err || (!s->ptr)) return;
     if (n >= s->len) return;
     s->len = n;
 }
 //======================================================================
-void str_catstr(String *s1, String *s2)
-{
-    if ((s1->err) || (s2->err)) return;
-    if ((!s1->ptr) || (!s2->ptr)) return;
-
-    if (s1->size <= (s1->len + s2->len))
-    {
-        reserve(s1, s1->len + s2->len + 1);
-        if (s1->err)
-            return;
-    }
-    
-    memcpy(s1->ptr + s1->len, s2->ptr, s2->len);
-    s1->len += s2->len;
-}
-//======================================================================
 void str_cat(String *s, const char *cs)
 {
-    if (s->err || (!s)) return;
+    if (!s || !cs) return;
+    if (s->err) return;
 
     unsigned int len = strlen(cs);
     if (len == 0)
@@ -110,7 +99,7 @@ void str_cat(String *s, const char *cs)
 //======================================================================
 void str_cat_ln(String *s, const char *cs)
 {
-    if (s->err) return;
+    if (!s || s->err) return;
     if (!cs)
     {
         str_cat(s, "\r\n");
@@ -135,7 +124,8 @@ void str_cat_ln(String *s, const char *cs)
 //======================================================================
 void str_n_cat(String *s, const char *cs, unsigned int len)
 {
-    if (s->err || (!s) || (!len)) return;
+    if (!s || !cs) return;
+    if (s->err || !len) return;
     if (s->size <= (s->len + len))
     {
         reserve(s, s->len + len + 1);
@@ -149,7 +139,7 @@ void str_n_cat(String *s, const char *cs, unsigned int len)
 //======================================================================
 void str_llint(String *s, long long ll)
 {
-    if (s->err) return;
+    if (!s || s->err) return;
     char buf[21];
     snprintf(buf, sizeof(buf), "%lld", ll);
     str_cat(s, buf);
@@ -157,7 +147,7 @@ void str_llint(String *s, long long ll)
 //======================================================================
 void str_llint_ln(String *s, long long ll)
 {
-    if (s->err) return;
+    if (!s || s->err) return;
     char buf[21];
     snprintf(buf, sizeof(buf), "%lld", ll);
     str_cat_ln(s, buf);
@@ -165,17 +155,19 @@ void str_llint_ln(String *s, long long ll)
 //======================================================================
 const char *str_ptr(String *s)
 {
-    if (s->err || (!s->ptr)) return "";
+    if (!s || s->err || (!s->ptr)) return "";
     *(s->ptr + s->len) = 0;
     return s->ptr;
 }
 //======================================================================
 int str_len(String *s)
 {
+    if (!s || s->err) return 0;
     return s->len;
 }
 //======================================================================
 int str_size(String *s)
 {
+    if (!s || s->err) return 0;
     return s->size;
 }

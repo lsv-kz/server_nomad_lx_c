@@ -1,68 +1,71 @@
 #include "server.h"
 #include <sys/un.h>
 
-void set_sndbuf(int n);
 //======================================================================
-int create_server_socket(const struct Config *conf)
+int create_server_socket(const Config *conf)
 {
-    int sockfd, sock_opt = 1;
-    struct sockaddr_in server_sockaddr;
+    int sockfd;
+    struct addrinfo  hints, *result, *rp;
+    int n;
+    const int optval = 1;
     
-    sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if(sockfd == -1)
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+
+    if ((n = getaddrinfo(conf->host, conf->servPort, &hints, &result)) != 0) 
     {
-        fprintf(stderr, "   Error socket(): %s\n", strerror(errno));
+        fprintf(stderr, "Error getaddrinfo(%s:%s): %s\n", conf->host, conf->servPort, gai_strerror(n));
         return -1;
-    }
-    
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (void *)&sock_opt, sizeof(sock_opt)))
+    }  
+
+    for (rp = result; rp != NULL; rp = rp->ai_next)
     {
-        perror("setsockopt (SO_REUSEADDR)");
+        sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (sockfd == -1)
+            continue;
+        setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+
+        if (bind(sockfd, rp->ai_addr, rp->ai_addrlen) == 0)
+            break;
         close(sockfd);
+    }
+  
+    if (rp == NULL) 
+    {
+        fprintf(stderr, "Error: failed to bind\n");
         return -1;
     }
-    
+
     if (conf->TcpNoDelay == 'y')
     {
-        if (setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (void *)&sock_opt, sizeof(sock_opt)))
+        setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (void *)&optval, sizeof(optval)); // SOL_TCP
+    }
+
+    int flags = fcntl(sockfd, F_GETFL);
+    if (flags == -1)
+    {
+        fprintf(stderr, "Error fcntl(, F_GETFL, ): %s\n", strerror(errno));
+    }
+    else
+    {
+        flags |= O_NONBLOCK;
+        if (fcntl(sockfd, F_SETFL, flags) == -1)
         {
-            print_err("<%s:%d> setsockopt: unable to set TCP_NODELAY: %s\n", __func__, __LINE__, strerror(errno));
-            close(sockfd);
-            return -1;
+            fprintf(stderr, "Error fcntl(, F_SETFL, ): %s\n", strerror(errno));
         }
     }
-    
-    memset(&server_sockaddr, 0, sizeof server_sockaddr);
-    server_sockaddr.sin_family = PF_INET;
-    server_sockaddr.sin_port = htons(atoi(conf->servPort));
-    if (inet_pton(PF_INET, conf->host, &(server_sockaddr.sin_addr)) < 1)
+
+    freeaddrinfo(result);
+
+    if (listen(sockfd, conf->ListenBacklog) == -1) 
     {
-        print_err("   Error inet_pton(%s): %s\n", conf->host, strerror(errno));
+        fprintf(stderr, "Error listen(): %s\n", strerror(errno));
         close(sockfd);
         return -1;
     }
-//  server_sockaddr.sin_addr.s_addr = inet_addr(addr);
-//  server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    
-    if (bind(sockfd, (struct sockaddr *) &server_sockaddr, sizeof (server_sockaddr)) == -1)
-    {
-        perror("server: bind");
-        close(sockfd);
-        return -1;
-    }
-    
-    int sndbuf;
-    socklen_t optlen = sizeof(sndbuf);
-    getsockopt(sockfd, SOL_SOCKET, SO_SNDBUF, &sndbuf, &optlen);
-    print_err("<%s:%d> SO_SNDBUF: %d\n", __func__, __LINE__, sndbuf);
-    
-    if (listen(sockfd, conf->ListenBacklog) == -1)
-    {
-        perror("listen");
-        close(sockfd);
-        return -1;
-    }
-    
+
     return sockfd;
 }
 //======================================================================
@@ -71,14 +74,14 @@ int create_client_socket(const char *host)
     int sockfd, n;
     char addr[256];
     char port[16];
-    
+
     if (!host) return -1;
     n = sscanf(host, "%[^:]:%s", addr, port);
     if(n == 2) //==== AF_INET ====
     {
         const int sock_opt = 1;
         struct sockaddr_in sock_addr;
-        
+
         memset(&sock_addr, 0, sizeof(sock_addr));
 
         sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -86,7 +89,7 @@ int create_client_socket(const char *host)
         {
             return -errno;
         }
-        
+
         if(setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (void *)&sock_opt, sizeof(sock_opt)))  // SOL_TCP
         {
             print_err("<%s:%d> Error setsockopt(TCP_NODELAY): %s\n", __func__, __LINE__, strerror(errno));
@@ -118,9 +121,9 @@ int create_client_socket(const char *host)
         {
             return -errno;
         }
-        
+
         sock_addr.sun_family = AF_UNIX;
-        strcpy (sock_addr.sun_path, host);
+        snprintf(sock_addr.sun_path, sizeof(sock_addr.sun_path), "%s", host);
 
         if (connect (sockfd, (struct sockaddr *) &sock_addr, SUN_LEN(&sock_addr)) == -1)
         {
@@ -128,7 +131,7 @@ int create_client_socket(const char *host)
             return -errno;
         }
     }
-    
+
     int flags = fcntl(sockfd, F_GETFL);
     if (flags == -1)
     {
@@ -155,7 +158,7 @@ int unixBind(const char *path, int type)
         errno = EINVAL;
         return -1;
     }
-    
+
     memset(&addr, 0, sizeof(struct sockaddr_un));
     addr.sun_family = AF_UNIX;
     if (strlen(path) < sizeof(addr.sun_path))
@@ -189,7 +192,7 @@ int unixConnect(const char *path)
         errno = EINVAL;
         return -1;
     }
-    
+
     memset(&addr, 0, sizeof(struct sockaddr_un));
     addr.sun_family = AF_UNIX;
     if (strlen(path) < sizeof(addr.sun_path))

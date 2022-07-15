@@ -1,7 +1,7 @@
 #include "server.h"
 
 int flog = -1, flog_err = -1;
-pthread_mutex_t mtx_log = PTHREAD_MUTEX_INITIALIZER;
+//pthread_mutex_t mtx_log = PTHREAD_MUTEX_INITIALIZER;
 //======================================================================
 void create_logfiles(const char *log_dir, const char * ServerSoftware)
 {
@@ -18,16 +18,15 @@ void create_logfiles(const char *log_dir, const char * ServerSoftware)
     flog = open(s, O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if(flog == -1)
     {
-        perror("  Error create logfile");
-        fprintf(stderr,"  Error create logfile: %s; cwd: %s\n", s, getcwd(buf, sizeof(buf)));
+        fprintf(stderr,"Error create logfile: %s; cwd: %s\n", s, getcwd(buf, sizeof(buf)));
         exit(1);
     }
 
     snprintf(s, sizeof(s), "%s/%s-%s", log_dir, ServerSoftware, "error.log");
-    flog_err = open(s, O_CREAT | O_APPEND | O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    flog_err = open(s, O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);// O_APPEND 
     if(flog_err == -1)
     {
-        fprintf(stderr,"  Error create log_err: %s\n", s);
+        fprintf(stderr,"Error create log_err: %s\n", s);
         exit(1);
     }
 
@@ -52,7 +51,7 @@ void print_err(const char *format, ...)
     va_start(ap, format);
     vsnprintf(buf + len, sizeof(buf) - len, format, ap);
     va_end(ap);
-  
+
     if (flog_err > 0)
         write(flog_err, buf, strlen(buf));
     else
@@ -81,7 +80,7 @@ void print__err(Connect *req, const char *format, ...)
 //======================================================================
 void print_log(Connect *req)
 {
-    const int size = 300;
+    const int size = 320;
     char buf[size];
 
     if (req->reqMethod <= 0)
@@ -97,14 +96,14 @@ void print_log(Connect *req)
                 req->decodeUri,
                 (req->sReqParam) ? "?" : "",
                 (req->sReqParam) ? req->sReqParam : "",
-                get_str_http_prot(req->httpProt), 
+                get_str_http_prot(req->httpProt),
                 req->respStatus,
                 req->send_bytes,
-                (req->iReferer >= 0) ? req->reqHeadersValue[req->iReferer] : "-",
-                (req->iUserAgent >= 0) ? req->reqHeadersValue[req->iUserAgent] : "-");
+                (req->req_hd.iReferer >= 0) ? req->reqHeadersValue[req->req_hd.iReferer] : "-",
+                (req->req_hd.iUserAgent >= 0) ? req->reqHeadersValue[req->req_hd.iUserAgent] : "-");
     if (n >= size)
         buf[size - 2] = '\n';
-pthread_mutex_lock(&mtx_log);
+//pthread_mutex_lock(&mtx_log);
     write(flog, buf, strlen(buf));
-pthread_mutex_unlock(&mtx_log);
+//pthread_mutex_unlock(&mtx_log);
 }

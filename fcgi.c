@@ -627,14 +627,14 @@ int send_param(Connect *req, int fcgi_sock)
     
     add_param(&par, "SERVER_PROTOCOL", get_str_http_prot(req->httpProt));
     
-    if(req->iHost >= 0)
-        add_param(&par, "HTTP_HOST", req->reqHeadersValue[req->iHost]);
+    if(req->req_hd.iHost >= 0)
+        add_param(&par, "HTTP_HOST", req->reqHeadersValue[req->req_hd.iHost]);
     
-    if(req->iReferer >= 0)
-        add_param(&par, "HTTP_REFERER", req->reqHeadersValue[req->iReferer]);
+    if(req->req_hd.iReferer >= 0)
+        add_param(&par, "HTTP_REFERER", req->reqHeadersValue[req->req_hd.iReferer]);
     
-    if(req->iUserAgent >= 0)
-        add_param(&par, "HTTP_USER_AGENT", req->reqHeadersValue[req->iUserAgent]);
+    if(req->req_hd.iUserAgent >= 0)
+        add_param(&par, "HTTP_USER_AGENT", req->reqHeadersValue[req->req_hd.iUserAgent]);
     
     add_param(&par, "SCRIPT_NAME", req->decodeUri);
     
@@ -643,11 +643,11 @@ int send_param(Connect *req, int fcgi_sock)
     
     if(req->reqMethod == M_POST)
     {
-        if(req->iReqContentType >= 0)
-            add_param(&par, "CONTENT_TYPE", req->reqHeadersValue[req->iReqContentType]);
+        if(req->req_hd.iReqContentType >= 0)
+            add_param(&par, "CONTENT_TYPE", req->reqHeadersValue[req->req_hd.iReqContentType]);
         
-        if(req->iContentLength >= 0)
-            add_param(&par, "CONTENT_LENGTH", req->reqHeadersValue[req->iContentLength]);
+        if(req->req_hd.iContentLength >= 0)
+            add_param(&par, "CONTENT_LENGTH", req->reqHeadersValue[req->req_hd.iContentLength]);
     }
     
     add_param(&par, "QUERY_STRING", req->sReqParam);
@@ -668,10 +668,10 @@ int send_param(Connect *req, int fcgi_sock)
                 print__err(req, "<%s:%d> Error tail to script: %d\n", __func__, __LINE__, ret);
                 return -RS500;
             }
-            req->reqContentLength -= ret;
+            req->req_hd.reqContentLength -= ret;
         }
         
-        ret = client_to_fcgi(req->clientSocket, fcgi_sock, req->reqContentLength);
+        ret = client_to_fcgi(req->clientSocket, fcgi_sock, req->req_hd.reqContentLength);
         if (ret == -1)
         {
             print_err("<%s:%d> Error client_to_fcgi()\n", __func__, __LINE__);
@@ -713,22 +713,22 @@ int fcgi(Connect *req)
 
     if(req->reqMethod == M_POST)
     {
-        if (req->iReqContentType < 0)
+        if (req->req_hd.iReqContentType < 0)
         {
             print_err("<%s:%d> Content-Type \?\n", __func__, __LINE__);
             return -RS400;
         }
 
-        if(req->reqContentLength < 0)
+        if(req->req_hd.reqContentLength < 0)
         {
             print_err("<%s:%d> 411 Length Required\n", __func__, __LINE__);
             return -RS411;
-            req->reqContentLength = 0;
+            req->req_hd.reqContentLength = 0;
         }
 
-        if(req->reqContentLength > conf->ClientMaxBodySize)
+        if(req->req_hd.reqContentLength > conf->ClientMaxBodySize)
         {
-            print_err("<%s:%d> 413 Request entity too large: %lld\n", __func__, __LINE__, req->reqContentLength);
+            print_err("<%s:%d> 413 Request entity too large: %lld\n", __func__, __LINE__, req->req_hd.reqContentLength);
             return -RS413;
         }
     }
