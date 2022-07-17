@@ -65,7 +65,7 @@ int send_part_file(Connect *req, char *buf, int size_buf)
             }
             else
             {
-                print__err(req, "<%s:%d> Error sendfile(); %s\n", __func__, __LINE__, strerror(errno));
+                print__err(req, "<%s:%d> Error sendfile()=%d; %s\n", __func__, __LINE__, ret, strerror(errno));
                 return -1;
             }
         }
@@ -76,7 +76,7 @@ int send_part_file(Connect *req, char *buf, int size_buf)
         }
         else
         {
-            print__err(req, "<%s:%d> Error sendfile(): ret=%d, wr_bytes=%ld\n", __func__, __LINE__, ret, wr_bytes);
+            print__err(req, "<%s:%d> Error sendfile()=%d, wr_bytes=%ld\n", __func__, __LINE__, ret, wr_bytes);
             return -1;
         }
     #endif
@@ -419,8 +419,14 @@ pthread_mutex_unlock(&mtx_);
             {
                 --ret;
                 print__err(r, "<%s:%d> Error: revents=0x%x\n", __func__, __LINE__, fdwr[i].revents);
-                r->err = NO_PRINT_LOG;
-                
+                if (r->event == POLLOUT)
+                {
+                    r->req_hd.iReferer = MAX_HEADERS - 1;
+                    r->reqHeadersValue[r->req_hd.iReferer] = "Connection reset by peer";
+                    r->err = -1;
+                }
+                else
+                    r->err = NO_PRINT_LOG;
                 del_from_list(r);
                 end_response(r);
             }
