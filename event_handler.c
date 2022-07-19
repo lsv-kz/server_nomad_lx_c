@@ -306,7 +306,7 @@ pthread_mutex_unlock(&mtx_);
 void *event_handler(void *arg)
 {
     int num_chld = *((int*)arg);
-    int count_resp = 0;
+    int count_resp = 0, all_req = 0;
     int ret = 1, n, wr;
     int size_buf = conf->SEND_FILE_SIZE_PART;
     char *rd_buf = NULL;
@@ -411,6 +411,7 @@ pthread_mutex_unlock(&mtx_);
                 {
                     del_from_list(r);
                     push_resp_list(r);
+                    all_req++;
                 }
                 else
                     r->sock_timer = 0;
@@ -440,6 +441,7 @@ pthread_mutex_unlock(&mtx_);
             free(rd_buf);
     free(fdwr);
     free(arr_conn);
+    print_err("***** Exit [%s:proc=%d] all req=%d *****\n", __func__, num_chld, all_req);
     return NULL;
 }
 //======================================================================

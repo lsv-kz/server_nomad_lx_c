@@ -23,7 +23,7 @@ void create_logfiles(const char *log_dir, const char * ServerSoftware)
     }
 
     snprintf(s, sizeof(s), "%s/%s-%s", log_dir, ServerSoftware, "error.log");
-    flog_err = open(s, O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);// O_APPEND 
+    flog_err = open(s, O_CREAT | O_APPEND | O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);//  O_TRUNC
     if(flog_err == -1)
     {
         fprintf(stderr,"Error create log_err: %s\n", s);

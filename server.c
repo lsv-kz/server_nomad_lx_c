@@ -12,7 +12,8 @@ static int from_chld[2], unixFD[8];
 static pid_t pidArr[8];
 static int numConn[8];
 static char conf_dir[512];
-static int restart = 0;
+static int start = 0;
+static int run = 1;
 static unsigned int all_conn = 0;
 //======================================================================
 static void signal_handler(int sig)
@@ -44,8 +45,26 @@ static void signal_handler(int sig)
                 }
             }
         }
-
-        restart = 1;
+    }
+    else if (sig == SIGTERM)
+    {
+        fprintf(stderr, "<main> ####### SIGTERM #######\n");
+        char ch[1];
+        for (int i = 0; i < conf->NumProc; ++i)
+        {
+            int ret = send_fd(unixFD[i], -1, ch, 1);
+            if (ret < 0)
+            {
+                fprintf(stderr, "<%s:%d> Error sendClientSock()\n", __func__, __LINE__);
+                if (kill(pidArr[i], SIGKILL))
+                {
+                    fprintf(stderr, "<%s:%d> Error: kill(%u, %u)\n", __func__, __LINE__, pidArr[i], SIGKILL);
+                    exit(1);
+                }
+            }
+        }
+        
+        run = 0;
     }
     else
     {
@@ -106,7 +125,7 @@ void create_proc(int NumProc)
 //======================================================================
 void print_help(const char *name)
 {
-    fprintf(stderr, "Usage: %s [-c configfile] [-p pid] [-s signal]\n   signals: restart\n", name);
+    fprintf(stderr, "Usage: %s [-c configfile] [-p pid] [-s signal]\n   signals: restart, stop\n", name);
     exit(EXIT_FAILURE);
 }
 //======================================================================
@@ -169,6 +188,15 @@ int main(int argc, char *argv[])
                 }
                 exit(0);
             }
+            else if (pid_ && (!strcmp(sig, "stop")))
+            {
+                if (kill(pid_, SIGTERM))
+                {
+                    fprintf(stderr, "<%d> Error kill(pid=%u, sig=%u): %s\n", __LINE__, pid_, SIGKILL, strerror(errno));
+                    exit(1);
+                }
+                exit(0);
+            }
             else
             {
                 fprintf(stderr, "<%d> ? pid=%u, %s\n", __LINE__, pid_, sig);
@@ -179,40 +207,37 @@ int main(int argc, char *argv[])
         }
     }
 
-    while (!restart)
+    while (run)
     {
         if (main_proc())
-            break;
-
-        if (restart == 1)
-            restart = 0;
-        else
             break;
     }
 
     return 0;
 }
 //======================================================================
-static int run = 0;
-//----------------------------------------------------------------------
 int main_proc()
 {
     char s[256];
 
     if (read_conf_file(conf_dir))
         return -1;
-    sockServer = create_server_socket(conf);
-    if (sockServer == -1)
+
+    if (start == 0)
     {
-        fprintf(stderr, "<%d>   server: failed to bind [%s:%s]\n", __LINE__, conf->host, conf->servPort);
-        exit(1);
+        sockServer = create_server_socket(conf);
+        if (sockServer == -1)
+        {
+            fprintf(stderr, "<%s:%d> Error: create_server_socket(%s:%s)\n", __func__, __LINE__, conf->host, conf->servPort);
+            exit(1);
+        }
     }
 
     create_logfiles(conf->logDir, conf->ServerSoftware);
-    if (run == 0)
+    if (start == 0)
     {
         set_uid();
-        run = 1;
+        start = 1;
     }
     //------------------------------------------------------------------
     pid_t pid = getpid();
@@ -274,10 +299,16 @@ int main_proc()
     create_proc(conf->NumProc);
     fprintf(stdout, "   pid=%u, uid=%u, gid=%u\n", pid, getuid(), getgid());
     fprintf(stderr, "   pid=%u, uid=%u, gid=%u\n", pid, getuid(), getgid());
-    
+
     if (signal(SIGUSR1, signal_handler) == SIG_ERR)
     {
         fprintf(stderr, "<%s:%d> Error signal(SIGUSR1): %s\n", __func__, __LINE__, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    if (signal(SIGTERM, signal_handler) == SIG_ERR)
+    {
+        fprintf(stderr, "<%s:%d> Error signal(SIGTERM): %s\n", __func__, __LINE__, strerror(errno));
         exit(EXIT_FAILURE);
     }
 
@@ -296,7 +327,6 @@ int main_proc()
     for (int i = 0; i < conf->NumProc; ++i)
         numConn[i] = 0;
 
-    int close_server = 0;
     static struct pollfd fdrd[2];
 
     fdrd[0].fd = from_chld[0];
@@ -311,7 +341,7 @@ int main_proc()
     struct sockaddr_storage clientAddr;
     socklen_t addrSize = sizeof(struct sockaddr_storage);
 
-    while (!close_server)
+    while (run)
     {
         for (i_fd = 0; i_fd < conf->NumProc; ++i_fd)
         {
@@ -335,6 +365,7 @@ int main_proc()
             else if (ret == -1)
             {
                 print_err("<%s:%d> Error sendClientSock()\n", __func__, __LINE__);
+                run = 0;
                 break;
             }
             else
@@ -349,8 +380,8 @@ int main_proc()
         int ret_poll = poll(fdrd, num_fdrd, -1);
         if (ret_poll <= 0)
         {
-            //if (errno == EINTR)
-            //    continue;
+            if (errno != EINTR)
+                run = 0;
             print_err("<%s:%d> Error poll()=-1: %s\n", __func__, __LINE__, strerror(errno));
             break;
         }
@@ -362,6 +393,7 @@ int main_proc()
             if (ret <= 0)
             {
                 print_err("<%s:%d> Error read()=%d: %s\n", __func__, __LINE__, ret, strerror(errno));
+                run = 0;
                 break;
             }
 
@@ -379,6 +411,7 @@ int main_proc()
             if (clientSock == -1)
             {
                 print_err("<%s:%d> Error accept()=-1: %s\n", __func__, __LINE__, strerror(errno));
+                run = 0;
                 break;
             }
             all_conn++;
@@ -392,6 +425,7 @@ int main_proc()
             else if (ret == -1)
             {
                 print_err("<%s:%d> Error send_fd()\n", __func__, __LINE__);
+                run = 0;
                 break;
             }
             else
@@ -406,6 +440,7 @@ int main_proc()
         {
             print_err("<%s:%d> fdrd[0].revents=0x%02x; fdrd[1].revents=0x%02x; ret=%d\n", __func__, __LINE__, 
                             fdrd[0].revents, fdrd[1].revents, ret_poll);
+            run = 0;
             break;
         }
     }
@@ -417,8 +452,11 @@ int main_proc()
         close(unixFD[i]);
     }
 
-    shutdown(sockServer, SHUT_RDWR);
-    close(sockServer);
+    if (run == 0)
+    {
+        shutdown(sockServer, SHUT_RDWR);
+        close(sockServer);
+    }
     close(from_chld[0]);
 
     while ((pid = wait(NULL)) != -1)
