@@ -26,7 +26,7 @@ static void signal_handler(int sig)
     if (sig == SIGINT)
     {
         fprintf(stderr, "<main> ######  SIGINT  ######\n");
-        run = 0;
+        get_sig = CLOSE_SIG;
     }
     else if (sig == SIGSEGV)
     {
@@ -124,7 +124,6 @@ void print_help(const char *name)
 //======================================================================
 int main(int argc, char *argv[])
 {
-    signal(SIGUSR2, SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
 
     if (argc == 1)
@@ -313,27 +312,15 @@ int main_proc()
     fprintf(stdout, "   pid=%u, uid=%u, gid=%u\n", pid, getuid(), getgid());
     fprintf(stderr, "   pid=%u, uid=%u, gid=%u\n", pid, getuid(), getgid());
 
-    if (signal(SIGUSR1, signal_handler) == SIG_ERR)
-    {
-        fprintf(stderr, "<%s:%d> Error signal(SIGUSR1): %s\n", __func__, __LINE__, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    if (signal(SIGTERM, signal_handler) == SIG_ERR)
-    {
-        fprintf(stderr, "<%s:%d> Error signal(SIGTERM): %s\n", __func__, __LINE__, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
     if (signal(SIGSEGV, signal_handler) == SIG_ERR)
     {
-        fprintf (stderr, "   Error signal(SIGSEGV)!\n");
+        fprintf (stderr, "   Error signal(SIGSEGV): %s\n", strerror(errno));
         exit (EXIT_FAILURE);
     }
 
     if (signal(SIGINT, signal_handler) == SIG_ERR)
     {
-        fprintf (stderr, "   Error signal(SIGINT)!\n");
+        fprintf (stderr, "   Error signal(SIGINT): %s\n", strerror(errno));
         exit (EXIT_FAILURE);
     }
     //------------------------------------------------------------------
@@ -392,34 +379,15 @@ int main_proc()
             if (all_conn == 0)
             {
                 if (get_sig == RESTART_SIG)
-                {
                     run = 1;
-                }
                 else if (get_sig == CLOSE_SIG)
-                {
                     run = 0;
-                }
                 else
                 {
                     fprintf(stderr, "<%s:%d> Error: get_sig=%d\n", __func__, __LINE__, get_sig);
                     run = 1;
                 }
 
-                char ch[1];
-                for (int i = 0; i < conf->NumProc; ++i)
-                {
-                    ch[0] = i;
-                    int ret = send_fd(unixFD[i], -1, ch, 1);
-                    if (ret < 0)
-                    {
-                        fprintf(stderr, "<%s:%d> Error send_fd()\n", __func__, __LINE__);
-                        if (kill(pidArr[i], SIGKILL))
-                        {
-                            fprintf(stderr, "<%s:%d> Error: kill(%u, %u)\n", __func__, __LINE__, pidArr[i], SIGKILL);
-                            exit(1);
-                        }
-                    }
-                }
                 get_sig = 0;
                 break;
             }
@@ -524,6 +492,16 @@ int main_proc()
 
     for (int i = 0; i < conf->NumProc; ++i)
     {
+        char ch = i;
+        int ret = send_fd(unixFD[i], -1, &ch, 1);
+        if (ret < 0)
+        {
+            fprintf(stderr, "<%s:%d> Error send_fd()\n", __func__, __LINE__);
+            if (kill(pidArr[i], SIGKILL))
+            {
+                fprintf(stderr, "<%s:%d> Error: kill(%u, %u)\n", __func__, __LINE__, pidArr[i], SIGKILL);
+            }
+        }
         close(unixFD[i]);
     }
 

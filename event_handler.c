@@ -18,7 +18,7 @@ static Connect *snd_end = NULL;
 static Connect *snd_new_start = NULL;
 static Connect *snd_new_end = NULL;
 
-static Connect *pNext = NULL, *r_start = NULL;
+static Connect *pNext = NULL;
 
 static pthread_mutex_t mtx_ = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cond_ = PTHREAD_COND_INITIALIZER;
@@ -172,9 +172,6 @@ static void del_from_list(Connect *r)
         if (r == pNext)
             pNext = r->next;
 
-        if (r == r_start)
-            r_start = NULL;
-
         close(r->fd);
         del_from_snd_list(r);
     }
@@ -250,6 +247,7 @@ pthread_mutex_unlock(&mtx_);
         pNext = snd_start;
     r = pNext;
     next = NULL;
+    Connect *r_start = NULL;
     for ( int n_snd = 0; r; r = next)
     {
         next = r->next;
