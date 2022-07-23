@@ -8,7 +8,7 @@ int create_server_socket(const Config *conf)
     struct addrinfo  hints, *result, *rp;
     int n;
     const int optval = 1;
-    
+
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -31,7 +31,7 @@ int create_server_socket(const Config *conf)
             break;
         close(sockfd);
     }
-  
+
     if (rp == NULL) 
     {
         fprintf(stderr, "Error: failed to bind\n");
@@ -153,28 +153,27 @@ int unixBind(const char *path, int type)
 {
     struct sockaddr_un addr;
 
-    if (path == NULL || strlen(path) >= sizeof(addr.sun_path) - 1)
+    if ((path == NULL) || (strlen(path) >= (sizeof(addr.sun_path) - 1)))
     {
+        fprintf(stderr, "<%s:%d> Error: %s\n", __func__, __LINE__, strerror(EINVAL));
         errno = EINVAL;
         return -1;
     }
 
     memset(&addr, 0, sizeof(struct sockaddr_un));
     addr.sun_family = AF_UNIX;
-    if (strlen(path) < sizeof(addr.sun_path))
-        strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
-    else
-    {
-        errno = ENAMETOOLONG;
-        return -1;
-    }
+    strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
 
     int sock = socket(AF_UNIX, type, 0);
     if (sock == -1)
+    {
+        fprintf(stderr, "<%s:%d> Error socket(): %s\n", __func__, __LINE__, strerror(errno));
         return -1;
+    }
 
     if (bind(sock, (struct sockaddr *) &addr, sizeof(struct sockaddr_un)) == -1)
     {
+        fprintf(stderr, "<%s:%d> Error bind(): %s\n", __func__, __LINE__, strerror(errno));
         close(sock);
         return -1;
     }
@@ -182,36 +181,33 @@ int unixBind(const char *path, int type)
     return sock;
 }
 //======================================================================
-int unixConnect(const char *path)
+int unixConnect(const char *path, int type)
 {
-    int sock, savedErrno;
+    int sock;
     struct sockaddr_un addr;
 
-    if (path == NULL || strlen(path) >= sizeof(addr.sun_path) - 1)
+    if ((path == NULL) || (strlen(path) >= (sizeof(addr.sun_path) - 1)))
     {
+        fprintf(stderr, "<%s:%d> Error: %s\n", __func__, __LINE__, strerror(EINVAL));
         errno = EINVAL;
         return -1;
     }
 
     memset(&addr, 0, sizeof(struct sockaddr_un));
     addr.sun_family = AF_UNIX;
-    if (strlen(path) < sizeof(addr.sun_path))
-        strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
-    else
+    strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
+
+    sock = socket(AF_UNIX, type, 0);
+    if (sock == -1)
     {
-        errno = ENAMETOOLONG;
+        fprintf(stderr, "<%s:%d> Error socket(): %s\n", __func__, __LINE__, strerror(errno));
         return -1;
     }
 
-    sock = socket(AF_UNIX, SOCK_DGRAM, 0);
-    if (sock == -1)
-        return -1;
-
     if (connect(sock, (struct sockaddr *) &addr, sizeof(struct sockaddr_un)) == -1)
     {
-        savedErrno = errno;
+        fprintf(stderr, "<%s:%d> Error connect(): %s\n", __func__, __LINE__, strerror(errno));
         close(sock);
-        errno = savedErrno;
         return -1;
     }
 

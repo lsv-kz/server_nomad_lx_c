@@ -93,6 +93,7 @@ typedef struct Config
     char rootDir[MAX_PATH];
     char cgiDir[MAX_PATH];
     char logDir[MAX_PATH];
+    char pidDir[MAX_PATH - 8];
 
     char UsePHP[16];
     char PathPHP[MAX_PATH];
@@ -243,7 +244,7 @@ void init_struct_request(Connect *req);
 //----------------------------------------------------------------------
 int create_client_socket(const char *host);
 int unixBind(const char *path, int type);
-int unixConnect(const char *path);
+int unixConnect(const char *path, int type);
 //----------------------------------------------------------------------
 int encode(const char *s_in, char *s_out, int len_out);
 int decode(const char *s_in, int len_in, char *s_out, int len_out);

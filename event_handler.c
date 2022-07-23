@@ -18,7 +18,7 @@ static Connect *snd_end = NULL;
 static Connect *snd_new_start = NULL;
 static Connect *snd_new_end = NULL;
 
-static Connect *pNext = NULL;
+static Connect *pNext = NULL, *r_start = NULL;
 
 static pthread_mutex_t mtx_ = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cond_ = PTHREAD_COND_INITIALIZER;
@@ -26,7 +26,6 @@ static pthread_cond_t cond_ = PTHREAD_COND_INITIALIZER;
 static int close_thr = 0;
 static Connect **arr_conn = NULL;
 int num_proc_, ind_;
-static int count_ = 0;
 //======================================================================
 int send_part_file(Connect *req, char *buf, int size_buf)
 {
@@ -53,7 +52,7 @@ int send_part_file(Connect *req, char *buf, int size_buf)
         }
     #elif defined(FREEBSD_)
         off_t wr_bytes;
-        int ret = sendfile(req->fd, req->clientSocket, req->offset, len, NULL, &wr_bytes, SF_NOCACHE);// SF_NODISKIO 
+        int ret = sendfile(req->fd, req->clientSocket, req->offset, len, NULL, &wr_bytes, 0);// SF_NODISKIO SF_NOCACHE
         if (ret == -1)
         {
             if (errno == EAGAIN)
@@ -172,6 +171,10 @@ static void del_from_list(Connect *r)
     {
         if (r == pNext)
             pNext = r->next;
+
+        if (r == r_start)
+            r_start = NULL;
+
         close(r->fd);
         del_from_snd_list(r);
     }
@@ -270,7 +273,10 @@ pthread_mutex_unlock(&mtx_);
         else
         {
             if (n_snd == 0)
+            {
                 r->first_snd = 1;
+                r_start = r;
+            }
             
             if (r->sock_timer == 0)
                 r->sock_timer = t;
@@ -283,22 +289,15 @@ pthread_mutex_unlock(&mtx_);
             if (n_snd >= conf->MAX_SND_FD)
                 break;
         }
-        
+
         if (!next)
             next = snd_start;
     }
-    
-    if (pNext)
-        pNext->first_snd = 0;
-    
-    if (count_ < 10)
-        ++count_;
-    else
-    {
-        if (pNext)
-            pNext = pNext->next;
-        count_ = 0;
-    }
+
+    pNext = next;
+
+    if (r_start)
+        r_start->first_snd = 0;
 
     return i;
 }

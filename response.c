@@ -466,7 +466,7 @@ int response2(Connect *req)
             return -RS403;
         else if (errno == EMFILE)
         {
-            print_err("<%s:%d> Error open(%s)\n", __func__, __LINE__, str_ptr(req->path));
+            print_err("<%s:%d> Error open(%s): %s\n", __func__, __LINE__, str_ptr(req->path), strerror(errno));
             return -1;
         }
         else

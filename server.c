@@ -1,12 +1,13 @@
 #include "server.h"
 
-static int sockServer;
+static int sockServer, sock_sig;
 
 int create_server_socket(const Config *conf);
 int read_conf_file(const char *path_conf);
 void create_logfiles(const char *log_dir, const char * ServerSoftware);
 int set_uid();
 int main_proc();
+int seng_fd_timeout(int, int, struct sockaddr_storage *, socklen_t, int);
 
 static int from_chld[2], unixFD[8];
 static pid_t pidArr[8];
@@ -15,61 +16,53 @@ static char conf_dir[512];
 static int start = 0;
 static int run = 1;
 static unsigned int all_conn = 0;
+static char name_sig_sock[32];
+static char pidFile[MAX_PATH];
+static int get_sig = 0;
+enum { RESTART_SIG = 1, CLOSE_SIG,};
 //======================================================================
 static void signal_handler(int sig)
 {
-    fprintf(stderr, "<main> All connect: %u\n", all_conn);
     if (sig == SIGINT)
     {
         fprintf(stderr, "<main> ######  SIGINT  ######\n");
+        run = 0;
     }
     else if (sig == SIGSEGV)
     {
         fprintf(stderr, "<main> ######  SIGSEGV  ######\n");
         exit(1);
     }
-    else if (sig == SIGUSR1)
-    {
-        fprintf(stderr, "<main> ####### SIGUSR1 #######\n");
-        char ch[1];
-        for (int i = 0; i < conf->NumProc; ++i)
-        {
-            int ret = send_fd(unixFD[i], -1, ch, 1);
-            if (ret < 0)
-            {
-                fprintf(stderr, "<%s:%d> Error sendClientSock()\n", __func__, __LINE__);
-                if (kill(pidArr[i], SIGKILL))
-                {
-                    fprintf(stderr, "<%s:%d> Error: kill(%u, %u)\n", __func__, __LINE__, pidArr[i], SIGKILL);
-                    exit(1);
-                }
-            }
-        }
-    }
-    else if (sig == SIGTERM)
-    {
-        fprintf(stderr, "<main> ####### SIGTERM #######\n");
-        char ch[1];
-        for (int i = 0; i < conf->NumProc; ++i)
-        {
-            int ret = send_fd(unixFD[i], -1, ch, 1);
-            if (ret < 0)
-            {
-                fprintf(stderr, "<%s:%d> Error sendClientSock()\n", __func__, __LINE__);
-                if (kill(pidArr[i], SIGKILL))
-                {
-                    fprintf(stderr, "<%s:%d> Error: kill(%u, %u)\n", __func__, __LINE__, pidArr[i], SIGKILL);
-                    exit(1);
-                }
-            }
-        }
-        
-        run = 0;
-    }
     else
     {
         fprintf(stderr, "sig=%d\n", sig);
     }
+}
+//======================================================================
+int send_sig(const char *sig)
+{
+    for (int i = 0; i < conf->NumProc; ++i)
+    {
+        int ret = send_fd(unixFD[i], -1, &i, sizeof(i));
+        if (ret < 0)
+        {
+            fprintf(stderr, "<%s:%d> Error sendClientSock()\n", __func__, __LINE__);
+            kill(pidArr[i], SIGKILL);
+            return 0;
+        }
+    }
+
+    if (!strcmp(sig, "restart"))
+        return 1;
+    else if (!strcmp(sig, "close"))
+        return 0;
+    else
+    {
+        fprintf(stderr, "<%s:%d> Error signal: %s\n", __func__, __LINE__, sig);
+        return 0;
+    }
+
+    return 0;
 }
 //======================================================================
 pid_t create_child(int num_chld, int *from_chld);
@@ -107,7 +100,7 @@ void create_proc(int NumProc)
         char s[32];
         snprintf(s, sizeof(s), "unix_sock_%d", i);
         
-        if ((unixFD[i] = unixConnect(s)) < 0)
+        if ((unixFD[i] = unixConnect(s, SOCK_DGRAM)) < 0)
         {
             fprintf(stderr, "[%d]<%s:%d> Error create_fcgi_socket(%s)=%d: %s\n", i, __func__, __LINE__, 
                             s, unixFD[i], strerror(errno));
@@ -125,7 +118,7 @@ void create_proc(int NumProc)
 //======================================================================
 void print_help(const char *name)
 {
-    fprintf(stderr, "Usage: %s [-c configfile] [-p pid] [-s signal]\n   signals: restart, stop\n", name);
+    fprintf(stderr, "Usage: %s [-c configfile] [-s signal]\n   signals: restart, close\n", name);
     exit(EXIT_FAILURE);
 }
 //======================================================================
@@ -140,22 +133,13 @@ int main(int argc, char *argv[])
     {
         int c;
         pid_t pid_ = 0;
-        char *sig = NULL, *conf_dir_ = NULL, *p;
-        while ((c = getopt(argc, argv, "c:p:s:h")) != -1)
+        char *sig = NULL, *conf_dir_ = NULL;
+        while ((c = getopt(argc, argv, "c:s:h")) != -1)
         {
             switch (c)
             {
                 case 'c':
                     conf_dir_ = optarg;
-                    break;
-                case 'p':
-                    p = optarg;
-                    if (sscanf(p, "%u", &pid_) != 1)
-                    {
-                        fprintf(stderr, "<%s:%d> Error: sscanf()\n", __func__, __LINE__);
-                        print_help(argv[0]);
-                        exit(0);
-                    }
                     break;
                 case 's':
                     sig = optarg;
@@ -178,37 +162,84 @@ int main(int argc, char *argv[])
         {
             if (read_conf_file(conf_dir))
                 exit(1);
+            
+            snprintf(pidFile, sizeof(pidFile), "%s/pid.txt", conf->pidDir);
+            FILE *fpid = fopen(pidFile, "r");
+            if (!fpid)
+            {
+                fprintf(stderr, "<%s:%d> Error open PidFile(%s): %s\n", __func__, __LINE__, pidFile, strerror(errno));
+                exit(1);
+            }
 
-            if (pid_ && (!strcmp(sig, "restart")))
-            {
-                if (kill(pid_, SIGUSR1))
-                {
-                    fprintf(stderr, "<%d> Error kill(pid=%u, sig=%u): %s\n", __LINE__, pid_, SIGUSR1, strerror(errno));
-                    exit(1);
-                }
-                exit(0);
-            }
-            else if (pid_ && (!strcmp(sig, "stop")))
-            {
-                if (kill(pid_, SIGTERM))
-                {
-                    fprintf(stderr, "<%d> Error kill(pid=%u, sig=%u): %s\n", __LINE__, pid_, SIGKILL, strerror(errno));
-                    exit(1);
-                }
-                exit(0);
-            }
+            fprintf(fpid, "%u\n", getpid());
+            fscanf(fpid, "%u", &pid_);
+            fclose(fpid);
+
+            int data;
+            if (!strcmp(sig, "restart"))
+                data = RESTART_SIG;
+            else if (!strcmp(sig, "close"))
+                data = CLOSE_SIG;
             else
             {
-                fprintf(stderr, "<%d> ? pid=%u, %s\n", __LINE__, pid_, sig);
+                fprintf(stderr, "<%d> ? option -s: %s\n", __LINE__, sig);
                 print_help(argv[0]);
                 exit(1);
             }
-            return 0;
+
+            snprintf(name_sig_sock, sizeof(name_sig_sock), "/tmp/server_sock_sig_%d", pid_);
+            int sock = unixConnect(name_sig_sock, SOCK_DGRAM);
+            if (sock < 0)
+                exit(1);
+
+            if (write(sock, &data, sizeof(data)) < 0)
+            {
+                fprintf(stderr, "<%d> Error write(): %s\n", __LINE__, strerror(errno));
+                close(sock);
+                exit(1);
+            }
+
+            close(sock);
+            exit(0);
         }
     }
 
     while (run)
     {
+        if (read_conf_file(conf_dir))
+            return -1;
+
+        snprintf(pidFile, sizeof(pidFile), "%s/pid.txt", conf->pidDir);
+        FILE *fpid = fopen(pidFile, "w");
+        if (!fpid)
+        {
+            fprintf(stderr, "<%s:%d> Error open PidFile(%s): %s\n", __func__, __LINE__, pidFile, strerror(errno));
+            return -1;
+        }
+
+        fprintf(fpid, "%u\n", getpid());
+        fclose(fpid);
+
+        if (start == 0)
+        {
+            sockServer = create_server_socket(conf);
+            if (sockServer == -1)
+            {
+                fprintf(stderr, "<%s:%d> Error: create_server_socket(%s:%s)\n", __func__, __LINE__, conf->host, conf->servPort);
+                exit(1);
+            }
+
+            snprintf(name_sig_sock, sizeof(name_sig_sock), "/tmp/server_sock_sig_%d", getpid());
+            sock_sig = unixBind(name_sig_sock, SOCK_DGRAM);
+            if (sock_sig < 0)
+            {
+                exit(1);
+            }
+
+            set_uid();
+            start = 1;
+        }
+
         if (main_proc())
             break;
     }
@@ -220,25 +251,7 @@ int main_proc()
 {
     char s[256];
 
-    if (read_conf_file(conf_dir))
-        return -1;
-
-    if (start == 0)
-    {
-        sockServer = create_server_socket(conf);
-        if (sockServer == -1)
-        {
-            fprintf(stderr, "<%s:%d> Error: create_server_socket(%s:%s)\n", __func__, __LINE__, conf->host, conf->servPort);
-            exit(1);
-        }
-    }
-
     create_logfiles(conf->logDir, conf->ServerSoftware);
-    if (start == 0)
-    {
-        set_uid();
-        start = 1;
-    }
     //------------------------------------------------------------------
     pid_t pid = getpid();
 
@@ -327,39 +340,37 @@ int main_proc()
     for (int i = 0; i < conf->NumProc; ++i)
         numConn[i] = 0;
 
-    static struct pollfd fdrd[2];
+    static struct pollfd fdrd[3];
 
     fdrd[0].fd = from_chld[0];
     fdrd[0].events = POLLIN;
 
-    fdrd[1].fd = sockServer;
+    fdrd[1].fd = sock_sig;
     fdrd[1].events = POLLIN;
 
+    fdrd[2].fd = sockServer;
+    fdrd[2].events = POLLIN;
+
     int num_fdrd, i_fd;
-    int send_sock = 0;
+    struct
+    {
+        int sock;
+        int num;
+    } err_send_fd;
+
+    err_send_fd.sock = 0;
 
     struct sockaddr_storage clientAddr;
     socklen_t addrSize = sizeof(struct sockaddr_storage);
 
     while (run)
     {
-        for (i_fd = 0; i_fd < conf->NumProc; ++i_fd)
+        if (err_send_fd.sock > 0)
         {
-            if (numConn[i_fd] < conf->MAX_REQUESTS)
-                break;
-        }
-
-        if (i_fd >= conf->NumProc)
-            num_fdrd = 1;
-        else
-            num_fdrd = 2;
-
-        if (send_sock > 0)
-        {
-            int ret = send_fd(unixFD[i_fd], send_sock, &clientAddr, addrSize);
+            int ret = send_fd(unixFD[err_send_fd.num], err_send_fd.sock, &clientAddr, addrSize);
             if (ret == -ENOBUFS)
             {
-                num_fdrd = 1;
+                num_fdrd = 2;
                 print_err("<%s:%d> Error send_fd: ENOBUFS\n", __func__, __LINE__);
             }
             else if (ret == -1)
@@ -370,20 +381,70 @@ int main_proc()
             }
             else
             {
-                close(send_sock);
-                send_sock = 0;
-                numConn[i_fd]++;
-                continue;
+                close(err_send_fd.sock);
+                err_send_fd.sock = 0;
+                numConn[err_send_fd.num]++;
             }
+        }
+
+        if (get_sig)
+        {
+            if (all_conn == 0)
+            {
+                if (get_sig == RESTART_SIG)
+                {
+                    run = 1;
+                }
+                else if (get_sig == CLOSE_SIG)
+                {
+                    run = 0;
+                }
+                else
+                {
+                    fprintf(stderr, "<%s:%d> Error: get_sig=%d\n", __func__, __LINE__, get_sig);
+                    run = 1;
+                }
+
+                char ch[1];
+                for (int i = 0; i < conf->NumProc; ++i)
+                {
+                    ch[0] = i;
+                    int ret = send_fd(unixFD[i], -1, ch, 1);
+                    if (ret < 0)
+                    {
+                        fprintf(stderr, "<%s:%d> Error send_fd()\n", __func__, __LINE__);
+                        if (kill(pidArr[i], SIGKILL))
+                        {
+                            fprintf(stderr, "<%s:%d> Error: kill(%u, %u)\n", __func__, __LINE__, pidArr[i], SIGKILL);
+                            exit(1);
+                        }
+                    }
+                }
+                get_sig = 0;
+                break;
+            }
+            else
+                num_fdrd = 1;
+        }
+        else
+        {
+            for (i_fd = 0; i_fd < conf->NumProc; ++i_fd)
+            {
+                if (numConn[i_fd] < conf->MAX_REQUESTS)
+                    break;
+            }
+
+            if (i_fd >= conf->NumProc)
+                num_fdrd = 2;
+            else
+                num_fdrd = 3;
         }
 
         int ret_poll = poll(fdrd, num_fdrd, -1);
         if (ret_poll <= 0)
         {
-            if (errno != EINTR)
-                run = 0;
             print_err("<%s:%d> Error poll()=-1: %s\n", __func__, __LINE__, strerror(errno));
-            break;
+            continue;
         }
 
         if (fdrd[0].revents == POLLIN)
@@ -400,11 +461,24 @@ int main_proc()
             for ( int i = 0; i < ret; i++)
             {
                 numConn[s[i]]--;
+                all_conn--;
             }
             ret_poll--;
         }
 
         if (ret_poll && (fdrd[1].revents == POLLIN))
+        {
+            int ret = read(sock_sig, &get_sig, sizeof(get_sig));
+            if (ret <= 0)
+            {
+                print_err("<%s:%d> Error read()=%d: %s\n", __func__, __LINE__, ret, strerror(errno));
+                run = 0;
+                break;
+            }
+            ret_poll--;
+        }
+
+        if (ret_poll && (fdrd[2].revents == POLLIN))
         {
             addrSize = sizeof(struct sockaddr_storage);
             int clientSock = accept(sockServer, (struct sockaddr *)&clientAddr, &addrSize);
@@ -415,10 +489,13 @@ int main_proc()
                 break;
             }
             all_conn++;
+
             int ret = send_fd(unixFD[i_fd], clientSock, &clientAddr, addrSize);
+            //int ret = seng_fd_timeout(unixFD[i_fd], clientSock, &clientAddr, addrSize, 5);
             if (ret == -ENOBUFS)
             {
-                send_sock = clientSock;
+                err_send_fd.sock = clientSock;
+                err_send_fd.num = i_fd;
                 print_err("<%s:%d> Error send_fd: ENOBUFS\n", __func__, __LINE__);
                 continue;
             }
@@ -432,8 +509,8 @@ int main_proc()
             {
                 close(clientSock);
                 numConn[i_fd]++;
-                ret_poll--;
             }
+            ret_poll--;
         }
 
         if (ret_poll)
@@ -445,10 +522,8 @@ int main_proc()
         }
     }
 
-    print_err("<%s:%d> ********************\n", __func__, __LINE__);
     for (int i = 0; i < conf->NumProc; ++i)
     {
-        shutdown(unixFD[i], SHUT_RDWR);
         close(unixFD[i]);
     }
 
@@ -456,7 +531,11 @@ int main_proc()
     {
         shutdown(sockServer, SHUT_RDWR);
         close(sockServer);
+        remove(pidFile);
+        close(sock_sig);
+        remove(name_sig_sock);
     }
+    
     close(from_chld[0]);
 
     while ((pid = wait(NULL)) != -1)
@@ -465,7 +544,10 @@ int main_proc()
     }
 
     free_fcgi_list();
-    print_err("<%s:%d> Exit server\n", __func__, __LINE__);
+    if (run)
+        fprintf(stderr, "<%s> ***** Reload, All connect: %u *****\n", __func__, all_conn);
+    else
+        fprintf(stderr, "<%s> ***** Close, All connect: %u *****\n", __func__, all_conn);
     close_logs();
     return 0;
 }
@@ -510,4 +592,26 @@ pid_t create_child(int num_chld, int *from_chld)
     }
 
     return pid;
+}
+//======================================================================
+int seng_fd_timeout(int unix_sock, int fd, struct sockaddr_storage *addr, socklen_t size, int timeout)
+{
+    struct pollfd fdwr;
+
+    fdwr.fd = fd;
+    fdwr.events = POLLOUT;
+
+    int ret = poll(&fdwr, 1, timeout * 1000);
+    if (ret == -1)
+    {
+        print_err("<%s:%d> Error poll(): %s\n", __func__, __LINE__, strerror(errno));
+        return -1;
+    }
+    else if (!ret)
+    {
+        print_err("<%s:%d> TimeOut poll(), tm=%d\n", __func__, __LINE__, timeout);
+        return -1;
+    }
+
+    return send_fd(unix_sock, fd, addr, size);
 }

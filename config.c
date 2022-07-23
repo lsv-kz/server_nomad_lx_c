@@ -2,7 +2,7 @@
 
 static Config c;
 const Config* const conf = &c;
-const int min_open_fd = 8;
+const int min_open_fd = 9;
 //======================================================================
 int check_path(char *path, int size)
 {
@@ -56,9 +56,10 @@ void create_conf_file()
     fprintf(f, "SendFile   n \n");
     fprintf(f, "SendFileSizePart   1000000\n\n");
 
-    fprintf(f, "DocumentRoot %s\n", "?");
-    fprintf(f, "ScriptPath   %s\n", "?");
-    fprintf(f, "LogPath      %s\n\n", "?");
+    fprintf(f, "DocumentRoot ?\n");
+    fprintf(f, "ScriptPath   ?\n");
+    fprintf(f, "LogPath      ?\n");
+    fprintf(f, "PidDir      ?\n\n");
 
     fprintf(f, "MaxRequestsPerThr 100\n\n");
 
@@ -377,6 +378,8 @@ int read_conf_file_(FILE *f)
             err = get_word(&ln, c.cgiDir, sizeof(c.cgiDir));
         else if (!strcmp(s1, "LogPath") && (n == 2))
             err = get_word(&ln, c.logDir, sizeof(c.logDir));
+        else if (!strcmp(s1, "PidDir") && (n == 2))
+            err = get_word(&ln, c.pidDir, sizeof(c.pidDir));
         else if (!strcmp(s1, "MaxRequestsPerThr") && (n == 2))
             err = get_int(&ln, &c.MaxRequestsPerThr);
         else if (!strcmp(s1, "ListenBacklog") && (n == 2))
@@ -513,6 +516,12 @@ int read_conf_file_(FILE *f)
     {
         c.cgiDir[0] = '\0';
         fprintf(stderr, "!!! Error ScriptPath [%s]\n", c.cgiDir);
+    }
+    //------------------------------------------------------------------
+    if (check_path(c.pidDir, sizeof(c.pidDir)) == -1)
+    {
+        fprintf(stderr, "!!! Error PidDir [%s]\n", c.pidDir);
+        return -1;
     }
     //------------------------------------------------------------------
     if ((c.NumProc < 1) || (c.NumProc > 8))
