@@ -355,16 +355,15 @@ int main_proc()
         if (err_send_fd.sock > 0)
         {
             int ret = send_fd(unixFD[err_send_fd.num], err_send_fd.sock, &clientAddr, addrSize);
-            if (ret == -ENOBUFS)
+            if (ret == -1)
             {
-                num_fdrd = 2;
-                print_err("<%s:%d> Error send_fd: ENOBUFS\n", __func__, __LINE__);
-            }
-            else if (ret == -1)
-            {
-                print_err("<%s:%d> Error sendClientSock()\n", __func__, __LINE__);
                 run = 0;
                 break;
+            }
+            else if (ret == -ENOBUFS)
+            {
+                num_fdrd = 2;
+                print_err("<%s:%d> Error send_fd(): ENOBUFS\n", __func__, __LINE__);
             }
             else
             {
@@ -394,7 +393,7 @@ int main_proc()
             else
                 num_fdrd = 1;
         }
-        else
+        else if (err_send_fd.sock == 0)
         {
             for (i_fd = 0; i_fd < conf->NumProc; ++i_fd)
             {
@@ -460,18 +459,17 @@ int main_proc()
 
             int ret = send_fd(unixFD[i_fd], clientSock, &clientAddr, addrSize);
             //int ret = seng_fd_timeout(unixFD[i_fd], clientSock, &clientAddr, addrSize, 5);
-            if (ret == -ENOBUFS)
+            if (ret == -1)
+            {
+                run = 0;
+                break;
+            }
+            else if (ret == -ENOBUFS)
             {
                 err_send_fd.sock = clientSock;
                 err_send_fd.num = i_fd;
                 print_err("<%s:%d> Error send_fd: ENOBUFS\n", __func__, __LINE__);
                 continue;
-            }
-            else if (ret == -1)
-            {
-                print_err("<%s:%d> Error send_fd()\n", __func__, __LINE__);
-                run = 0;
-                break;
             }
             else
             {
