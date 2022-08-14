@@ -25,7 +25,7 @@ static pthread_cond_t cond_ = PTHREAD_COND_INITIALIZER;
 
 static int close_thr = 0;
 static Connect **arr_conn = NULL;
-int num_proc_, ind_;
+static int num_proc_;
 //======================================================================
 int send_part_file(Connect *req, char *buf, int size_buf)
 {
@@ -198,25 +198,28 @@ pthread_mutex_lock(&mtx_);
     
     if (snd_new_start)
     {
+        if (!pNext)
+            pNext = snd_new_start;
+
         if (snd_end)
             snd_end->next = snd_new_start;
         else
             snd_start = snd_new_start;
-        
+
         snd_new_start->prev = snd_end;
         snd_end = snd_new_end;
         snd_new_start = snd_new_end = NULL;
     }
-    
+
 pthread_mutex_unlock(&mtx_);
-    int i = 0;
     time_t t = time(NULL);
     //--------------------------- recv ---------------------------------
     Connect *r = recv_start, *next = NULL;
+    int i = 0;
     for ( ; r; r = next)
     {
         next = r->next;
-        
+
         if (((t - r->sock_timer) >= r->timeout) && (r->sock_timer != 0))
         {
             if (r->reqMethod)
@@ -226,7 +229,7 @@ pthread_mutex_unlock(&mtx_);
             print__err(r, "<%s:%d> Timeout = %ld\n", __func__, __LINE__, t - r->sock_timer);
             r->req_hd.iReferer = MAX_HEADERS - 1;
             r->reqHeadersValue[r->req_hd.iReferer] = "Timeout";
-            
+
             del_from_list(r);
             end_response(r);
         }
@@ -241,23 +244,20 @@ pthread_mutex_unlock(&mtx_);
             ++i;
         }
     }
-    ind_ = i;
     //-------------------------- send ----------------------------------
     if (!pNext || !snd_start)
         pNext = snd_start;
     r = pNext;
     next = NULL;
-    Connect *r_start = NULL;
     for ( int n_snd = 0; r; r = next)
     {
         next = r->next;
         if (r->first_snd == 1)
         {
             r->first_snd = 0;
-            next = NULL;
             break;
         }
-        
+
         if (((t - r->sock_timer) >= r->timeout) && (r->sock_timer != 0))
         {
             r->err = -1;
@@ -271,14 +271,11 @@ pthread_mutex_unlock(&mtx_);
         else
         {
             if (n_snd == 0)
-            {
                 r->first_snd = 1;
-                r_start = r;
-            }
-            
+
             if (r->sock_timer == 0)
                 r->sock_timer = t;
-            
+
             fdwr[i].fd = r->clientSocket;
             fdwr[i].events = r->event;
             arr_conn[i] = r;
@@ -292,10 +289,10 @@ pthread_mutex_unlock(&mtx_);
             next = snd_start;
     }
 
-    pNext = next;
+    if (pNext)
+        pNext->first_snd = 0;
 
-    if (r_start)
-        r_start->first_snd = 0;
+    pNext = next;
 
     return i;
 }
@@ -338,14 +335,14 @@ void *event_handler(void *arg)
     while (1)
     {
 pthread_mutex_lock(&mtx_);
-        
+
         while ((!recv_start) && (!recv_new_start) && (!snd_start) && (!snd_new_start) && (!close_thr))
         {
             pthread_cond_wait(&cond_, &mtx_);
         }
 
 pthread_mutex_unlock(&mtx_);
-        
+
         if (close_thr)
             break;
 
@@ -382,7 +379,7 @@ pthread_mutex_unlock(&mtx_);
                     r->err = wr;
                     r->req_hd.iReferer = MAX_HEADERS - 1;
                     r->reqHeadersValue[r->req_hd.iReferer] = "Connection reset by peer";
-                        
+
                     del_from_list(r);
                     end_response(r);
                 }
