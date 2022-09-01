@@ -263,7 +263,7 @@ int main_proc()
                 "   SendFile = %c\n"
                 "   SendFileSizePart = %ld\n"
                 "   SndBufSize = %d\n"
-                "   MaxSndFd = %d\n"
+                "   MaxEventSock = %d\n"
                 "   TimeoutPoll = %d\n\n"
                 "   NumChld = %d\n"
                 "   MaxThreads = %d\n"
@@ -285,7 +285,7 @@ int main_proc()
                 "   index.pl = %c\n"
                 "   index.fcgi = %c\n",
                 s, conf->ServerSoftware, conf->host, conf->servPort, conf->tcp_cork, conf->TcpNoDelay,
-                conf->SEND_FILE, conf->SEND_FILE_SIZE_PART, conf->SNDBUF_SIZE, conf->MAX_SND_FD,
+                conf->SEND_FILE, conf->SEND_FILE_SIZE_PART, conf->SNDBUF_SIZE, conf->MAX_EVENT_SOCK,
                 conf->TIMEOUT_POLL, conf->NumProc, conf->MaxThreads, conf->MinThreads, conf->MaxProcCgi,
                 conf->ListenBacklog, conf->MAX_REQUESTS, conf->KeepAlive, conf->TimeoutKeepAlive, conf->TimeOut,
                 conf->TimeoutCGI, conf->MaxRanges, conf->UsePHP, conf->PathPHP, conf->ShowMediaFiles,

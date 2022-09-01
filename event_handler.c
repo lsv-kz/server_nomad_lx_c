@@ -6,28 +6,23 @@
     #include <sys/uio.h>
 #endif
 
-static Connect *recv_start = NULL;
-static Connect *recv_end = NULL;
+static Connect *list_start = NULL;
+static Connect *list_end = NULL;
 
-static Connect *recv_new_start = NULL;
-static Connect *recv_new_end = NULL;
+static Connect *list_new_start = NULL;
+static Connect *list_new_end = NULL;
 
-static Connect *snd_start = NULL;
-static Connect *snd_end = NULL;
-
-static Connect *snd_new_start = NULL;
-static Connect *snd_new_end = NULL;
-
-static Connect *pNext = NULL;
+static Connect **array_conn = NULL;
+static struct pollfd *arr_pollfd;
 
 static pthread_mutex_t mtx_ = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cond_ = PTHREAD_COND_INITIALIZER;
 
 static int close_thr = 0;
-static Connect **arr_conn = NULL;
-static int num_proc_;
+int size_buf;
+char *snd_buf;
 //======================================================================
-int send_part_file(Connect *req, char *buf, int size_buf)
+int send_part_file(Connect *req)
 {
     int rd, wr, len;
     errno = 0;
@@ -64,7 +59,7 @@ int send_part_file(Connect *req, char *buf, int size_buf)
             }
             else
             {
-                print__err(req, "<%s:%d> Error sendfile()=%d; %s\n", __func__, __LINE__, ret, strerror(errno));
+                print__err(req, "<%s:%d> Error sendfile(): %s\n", __func__, __LINE__, strerror(errno));
                 return -1;
             }
         }
@@ -88,7 +83,7 @@ int send_part_file(Connect *req, char *buf, int size_buf)
         else
             len = req->respContentLength;
 
-        rd = read(req->fd, buf, len);
+        rd = read(req->fd, snd_buf, len);
         if (rd <= 0)
         {
             if (rd == -1)
@@ -96,7 +91,7 @@ int send_part_file(Connect *req, char *buf, int size_buf)
             return rd;
         }
 
-        wr = write(req->clientSocket, buf, rd);
+        wr = write(req->clientSocket, snd_buf, rd);
         if (wr == -1)
         {
             if (errno == EAGAIN)
@@ -119,116 +114,67 @@ int send_part_file(Connect *req, char *buf, int size_buf)
     return wr;
 }
 //======================================================================
-static void del_from_recv_list(Connect *r)
-{
-    if (r->prev && r->next)
-    {
-        r->prev->next = r->next;
-        r->next->prev = r->prev;
-    }
-    else if (r->prev && !r->next)
-    {
-        r->prev->next = r->next;
-        recv_end = r->prev;
-    }
-    else if (!r->prev && r->next)
-    {
-        r->next->prev = r->prev;
-        recv_start = r->next;
-    }
-    else if (!r->prev && !r->next)
-    {
-        recv_start = recv_end = NULL;
-    }
-}
-//======================================================================
-static void del_from_snd_list(Connect *r)
-{
-    if (r->prev && r->next)
-    {
-        r->prev->next = r->next;
-        r->next->prev = r->prev;
-    }
-    else if (r->prev && !r->next)
-    {
-        r->prev->next = r->next;
-        snd_end = r->prev;
-    }
-    else if (!r->prev && r->next)
-    {
-        r->next->prev = r->prev;
-        snd_start = r->next;
-    }
-    else if (!r->prev && !r->next)
-    {
-        snd_start = snd_end = NULL;
-    }
-}
-//======================================================================
 static void del_from_list(Connect *r)
 {
     if (r->event == POLLOUT)
-    {
-        if (r == pNext)
-            pNext = r->next;
-
         close(r->fd);
-        del_from_snd_list(r);
+    
+    if (r->prev && r->next)
+    {
+        r->prev->next = r->next;
+        r->next->prev = r->prev;
     }
-    else if (r->event == POLLIN)
-        del_from_recv_list(r);
-    else
-        print_err("*** <%s:%d> event=0x%x\n", __func__, __LINE__, r->event);
+    else if (r->prev && !r->next)
+    {
+        r->prev->next = r->next;
+        list_end = r->prev;
+    }
+    else if (!r->prev && r->next)
+    {
+        r->next->prev = r->prev;
+        list_start = r->next;
+    }
+    else if (!r->prev && !r->next)
+    {
+        list_start = list_end = NULL;
+    }
 }
 //======================================================================
-int set_list(struct pollfd *fdwr)
+int set_list()
 {
 pthread_mutex_lock(&mtx_);
-    if (recv_new_start)
+    if (list_new_start)
     {
-        if (recv_end)
-            recv_end->next = recv_new_start;
+        if (list_end)
+            list_end->next = list_new_start;
         else
-            recv_start = recv_new_start;
+            list_start = list_new_start;
         
-        recv_new_start->prev = recv_end;
-        recv_end = recv_new_end;
-        recv_new_start = recv_new_end = NULL;
+        list_new_start->prev = list_end;
+        list_end = list_new_end;
+        list_new_start = list_new_end = NULL;
     }
-    
-    if (snd_new_start)
-    {
-        if (!pNext)
-            pNext = snd_new_start;
-
-        if (snd_end)
-            snd_end->next = snd_new_start;
-        else
-            snd_start = snd_new_start;
-
-        snd_new_start->prev = snd_end;
-        snd_end = snd_new_end;
-        snd_new_start = snd_new_end = NULL;
-    }
-
 pthread_mutex_unlock(&mtx_);
+
     time_t t = time(NULL);
-    //--------------------------- recv ---------------------------------
-    Connect *r = recv_start, *next = NULL;
+    Connect *r = list_start, *next = NULL;
     int i = 0;
+
     for ( ; r; r = next)
     {
         next = r->next;
-
+        
         if (((t - r->sock_timer) >= r->timeout) && (r->sock_timer != 0))
         {
             if (r->reqMethod)
+            {
                 r->err = -1;
+                print__err(r, "<%s:%d> Timeout = %ld\n", __func__, __LINE__, t - r->sock_timer);
+                r->req_hd.iReferer = MAX_HEADERS - 1;
+                r->reqHeadersValue[r->req_hd.iReferer] = "Timeout";
+            }
             else
                 r->err = NO_PRINT_LOG;
-            print__err(r, "<%s:%d> Timeout = %ld\n", __func__, __LINE__, t - r->sock_timer);
-            r->req_hd.iReferer = MAX_HEADERS - 1;
-            r->reqHeadersValue[r->req_hd.iReferer] = "Timeout";
 
             del_from_list(r);
             end_response(r);
@@ -237,62 +183,95 @@ pthread_mutex_unlock(&mtx_);
         {
             if (r->sock_timer == 0)
                 r->sock_timer = t;
-
-            fdwr[i].fd = r->clientSocket;
-            fdwr[i].events = r->event;
-            arr_conn[i] = r;
+            
+            arr_pollfd[i].fd = r->clientSocket;
+            arr_pollfd[i].events = r->event;
+            array_conn[i] = r;
             ++i;
         }
     }
-    //-------------------------- send ----------------------------------
-    if (!pNext || !snd_start)
-        pNext = snd_start;
-    r = pNext;
-    next = NULL;
-    for ( int n_snd = 0; r; r = next)
+
+    return i;
+}
+//======================================================================
+int poll_(int num_chld, int i, int nfd)
+{
+    int ret = poll(arr_pollfd + i, nfd, conf->TIMEOUT_POLL);
+    if (ret == -1)
     {
-        next = r->next;
-        if (r->first_snd == 1)
-        {
-            r->first_snd = 0;
-            break;
-        }
+        print_err("[%d]<%s:%d> Error poll(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
+        return -1;
+    }
+    else if (ret == 0)
+        return 0;
 
-        if (((t - r->sock_timer) >= r->timeout) && (r->sock_timer != 0))
+    Connect *r = NULL;
+    for ( ; (i < nfd) && (ret > 0); ++i)
+    {
+        r = array_conn[i];
+        if (arr_pollfd[i].revents == POLLOUT)
         {
-            r->err = -1;
-            print__err(r, "<%s:%d> Timeout = %ld\n", __func__, __LINE__, t - r->sock_timer);
-            r->req_hd.iReferer = MAX_HEADERS - 1;
-            r->reqHeadersValue[r->req_hd.iReferer] = "Timeout";
+            int wr = send_part_file(r);
+            if (wr == 0)
+            {
+                del_from_list(r);
+                end_response(r);
+            }
+            else if (wr == -1)
+            {
+                r->err = wr;
+                r->req_hd.iReferer = MAX_HEADERS - 1;
+                r->reqHeadersValue[r->req_hd.iReferer] = "Connection reset by peer";
+
+                del_from_list(r);
+                end_response(r);
+            }
+            else if (wr > 0) 
+                r->sock_timer = 0;
+            else if (wr == -EAGAIN)
+            {
+                r->sock_timer = 0;
+                print__err(r, "<%s:%d> Error: EAGAIN\n", __func__, __LINE__);
+            }
+            --ret;
+        }
+        else if (arr_pollfd[i].revents == POLLIN)
+        {
+            int n = hd_read(r);
+            if (n == -EAGAIN)
+                r->sock_timer = 0;
+            else if (n < 0)
+            {
+                r->err = n;
+                del_from_list(r);
+                end_response(r);
+            }
+            else if (n > 0)
+            {
+                del_from_list(r);
+                push_resp_list(r);
+            }
+            else
+                r->sock_timer = 0;
+            --ret;
+        }
+        else if (arr_pollfd[i].revents)
+        {
+            print__err(r, "<%s:%d> Error: events=0x%x, revents=0x%x\n", __func__, __LINE__, arr_pollfd[i].events, arr_pollfd[i].revents);
+            if (r->event == POLLOUT)
+            {
+                r->req_hd.iReferer = MAX_HEADERS - 1;
+                r->reqHeadersValue[r->req_hd.iReferer] = "Connection reset by peer";
+                r->err = -1;
+            }
+            else
+                r->err = NO_PRINT_LOG;
 
             del_from_list(r);
             end_response(r);
+            --ret;
         }
-        else
-        {
-            if (n_snd == 0)
-                r->first_snd = 1;
-
-            if (r->sock_timer == 0)
-                r->sock_timer = t;
-
-            fdwr[i].fd = r->clientSocket;
-            fdwr[i].events = r->event;
-            arr_conn[i] = r;
-            ++i;
-            ++n_snd;
-            if (n_snd >= conf->MAX_SND_FD)
-                break;
-        }
-
-        if (!next)
-            next = snd_start;
     }
-
-    if (pNext)
-        pNext->first_snd = 0;
-
-    pNext = next;
 
     return i;
 }
@@ -300,33 +279,32 @@ pthread_mutex_unlock(&mtx_);
 void *event_handler(void *arg)
 {
     int num_chld = *((int*)arg);
-    int count_resp = 0, all_req = 0;
-    int ret = 1, n, wr;
-    int size_buf = conf->SEND_FILE_SIZE_PART;
-    char *rd_buf = NULL;
-    num_proc_ = num_chld;
+    int count_resp = 0;
+    size_buf = conf->SEND_FILE_SIZE_PART;
+    snd_buf = NULL;
+
 #if defined(SEND_FILE_) && (defined(LINUX_) || defined(FREEBSD_))
     if (conf->SEND_FILE != 'y')
 #endif
     {
         size_buf = conf->SNDBUF_SIZE;
-        rd_buf = malloc(size_buf);
-        if (!rd_buf)
+        snd_buf = malloc(size_buf);
+        if (!snd_buf)
         {
             print_err("[%d]<%s:%d> Error malloc(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
             exit(1);
         }
     }
 
-    struct pollfd *fdwr = malloc(sizeof(struct pollfd) * conf->MAX_REQUESTS);
-    if (!fdwr)
+    arr_pollfd = malloc(sizeof(struct pollfd) * conf->MAX_REQUESTS);
+    if (!arr_pollfd)
     {
         print_err("[%d]<%s:%d> Error malloc(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
         exit(1);
     }
 
-    arr_conn = malloc(sizeof(Connect*) * conf->MAX_REQUESTS);
-    if (!arr_conn)
+    array_conn = malloc(sizeof(Connect*) * conf->MAX_REQUESTS);
+    if (!array_conn)
     {
         print_err("[%d]<%s:%d> Error malloc(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
         exit(1);
@@ -335,126 +313,67 @@ void *event_handler(void *arg)
     while (1)
     {
 pthread_mutex_lock(&mtx_);
-
-        while ((!recv_start) && (!recv_new_start) && (!snd_start) && (!snd_new_start) && (!close_thr))
+        while ((!list_start) && (!list_new_start) && (!close_thr))
         {
             pthread_cond_wait(&cond_, &mtx_);
         }
-
 pthread_mutex_unlock(&mtx_);
 
         if (close_thr)
             break;
 
-        count_resp = set_list(fdwr);
+        count_resp = set_list();
         if (count_resp == 0)
             continue;
 
-        ret = poll(fdwr, count_resp, conf->TIMEOUT_POLL);
-        if (ret == -1)
+        int nfd;
+        for (int i = 0; count_resp > 0; )
         {
-            print_err("[%d]<%s:%d> Error poll(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
-            break;
-        }
-        else if (ret == 0)
-        {
-            continue;
-        }
+            if (count_resp > conf->MAX_EVENT_SOCK)
+                nfd = conf->MAX_EVENT_SOCK;
+            else
+                nfd = count_resp;
 
-        Connect *r = NULL;
-        for ( int i = 0; (i < count_resp) && (ret > 0); ++i)
-        {
-            r = arr_conn[i];
-            if (fdwr[i].revents == POLLOUT)
+            int ret = poll_(num_chld, i, nfd);
+            if (ret < 0)
             {
-                --ret;
-                wr = send_part_file(r, rd_buf, size_buf);
-                if (wr == 0)
-                {
-                    del_from_list(r);
-                    end_response(r);
-                }
-                else if (wr == -1)
-                {
-                    r->err = wr;
-                    r->req_hd.iReferer = MAX_HEADERS - 1;
-                    r->reqHeadersValue[r->req_hd.iReferer] = "Connection reset by peer";
+                print_err("[%d]<%s:%d> Error poll_()\n", num_chld, __func__, __LINE__);
+                break;
+            }
+            else if (ret == 0)
+                break;
 
-                    del_from_list(r);
-                    end_response(r);
-                }
-                else if (wr > 0) 
-                    r->sock_timer = 0;
-                else if (wr == -EAGAIN)
-                {
-                    r->sock_timer = 0;
-                    print__err(r, "<%s:%d> Error: EAGAIN\n", __func__, __LINE__);
-                }
-            }
-            else if (fdwr[i].revents == POLLIN)
-            {
-                --ret;
-                n = hd_read(r);
-                if (n < 0)
-                {
-                    r->err = n;
-                    del_from_list(r);
-                    end_response(r);
-                }
-                else if (n > 0)
-                {
-                    del_from_list(r);
-                    push_resp_list(r);
-                    all_req++;
-                }
-                else
-                    r->sock_timer = 0;
-            }
-            else if (fdwr[i].revents)
-            {
-                --ret;
-                print__err(r, "<%s:%d> Error: revents=0x%x\n", __func__, __LINE__, fdwr[i].revents);
-                if (r->event == POLLOUT)
-                {
-                    r->req_hd.iReferer = MAX_HEADERS - 1;
-                    r->reqHeadersValue[r->req_hd.iReferer] = "Connection reset by peer";
-                    r->err = -1;
-                }
-                else
-                    r->err = NO_PRINT_LOG;
-                del_from_list(r);
-                end_response(r);
-            }
+            i += nfd;
+            count_resp -= nfd;
         }
     }
 
+    free(arr_pollfd);
+    free(array_conn);
 #if defined(SEND_FILE_) && (defined(LINUX_) || defined(FREEBSD_))
     if (conf->SEND_FILE != 'y')
 #endif
-        if (rd_buf)
-            free(rd_buf);
-    free(fdwr);
-    free(arr_conn);
-    print_err("***** Exit [%s:proc=%d] all req=%d *****\n", __func__, num_chld, all_req);
+        if (snd_buf)
+            free(snd_buf);
+    print_err("***** Exit [%s:proc=%d] *****\n", __func__, num_chld);
     return NULL;
 }
 //======================================================================
 void push_pollout_list(Connect *req)
 {
     req->event = POLLOUT;
-    req->first_snd = 0;
     lseek(req->fd, req->offset, SEEK_SET);
     req->sock_timer = 0;
     req->next = NULL;
 pthread_mutex_lock(&mtx_);
-    req->prev = snd_new_end;
-    if (snd_new_start)
+    req->prev = list_new_end;
+    if (list_new_start)
     {
-        snd_new_end->next = req;
-        snd_new_end = req;
+        list_new_end->next = req;
+        list_new_end = req;
     }
     else
-        snd_new_start = snd_new_end = req;
+        list_new_start = list_new_end = req;
 pthread_mutex_unlock(&mtx_);
     pthread_cond_signal(&cond_);
 }
@@ -467,14 +386,14 @@ void push_pollin_list(Connect *req)
     req->sock_timer = 0;
     req->next = NULL;
 pthread_mutex_lock(&mtx_);
-    req->prev = recv_new_end;
-    if (recv_new_start)
+    req->prev = list_new_end;
+    if (list_new_start)
     {
-        recv_new_end->next = req;
-        recv_new_end = req;
+        list_new_end->next = req;
+        list_new_end = req;
     }
     else
-        recv_new_start = recv_new_end = req;
+        list_new_start = list_new_end = req;
 pthread_mutex_unlock(&mtx_);
     pthread_cond_signal(&cond_);
 }

@@ -63,7 +63,7 @@ void create_conf_file()
 
     fprintf(f, "MaxRequestsPerThr 100\n\n");
 
-    fprintf(f, "MaxSndFd   200\n");
+    fprintf(f, "MaxEventSock   100\n");
     fprintf(f, "TimeoutPoll 10\n\n");
 
     fprintf(f, "ListenBacklog 128\n\n");
@@ -384,8 +384,8 @@ int read_conf_file_(FILE *f)
             err = get_int(&ln, &c.MaxRequestsPerThr);
         else if (!strcmp(s1, "ListenBacklog") && (n == 2))
             err = get_int(&ln, &c.ListenBacklog);
-        else if (!strcmp(s1, "MaxSndFd") && (n == 2))
-            err = get_int(&ln, &c.MAX_SND_FD);
+        else if (!strcmp(s1, "MaxEventSock") && (n == 2))
+            err = get_int(&ln, &c.MAX_EVENT_SOCK);
         else if (!strcmp(s1, "TimeoutPoll") && (n == 2))
             err = get_int(&ln, &c.TIMEOUT_POLL);
         else if (!strcmp(s1, "MaxRequests") && (n == 2))

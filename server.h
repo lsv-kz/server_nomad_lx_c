@@ -105,7 +105,7 @@ typedef struct Config
     char SEND_FILE;
     long SEND_FILE_SIZE_PART;
     int SNDBUF_SIZE;
-    int MAX_SND_FD;
+    int MAX_EVENT_SOCK;
     int MAX_REQUESTS;
 
     int NumProc;
@@ -168,7 +168,6 @@ typedef struct Connect{
     time_t sock_timer;
     int  timeout;
     int  event;
-    int  first_snd;
 
     int  err;
     char remoteAddr[64];
