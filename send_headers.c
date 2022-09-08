@@ -21,7 +21,7 @@ void create_response_headers(Connect *req, String *hd, String *hdrs)
     str_cat_ln(hd, time_resp);
 
     str_cat(hd, "Server: ");
-    str_cat_ln(hd, conf->ServerSoftware);
+    str_cat_ln(hd, conf->SERVER_SOFTWARE);
 
     if(req->reqMethod == M_OPTIONS)
         str_cat(hd, "Allow: OPTIONS, GET, HEAD, POST\r\n");
@@ -90,7 +90,7 @@ void create_response_headers(Connect *req, String *hd, String *hdrs)
         return;
     }
 
-    int n = write_timeout(req->clientSocket, str_ptr(hd), str_len(hd), conf->TimeOut);
+    int n = write_timeout(req->clientSocket, str_ptr(hd), str_len(hd), conf->TIMEOUT);
     if(n <= 0)
     {
         print_err("<%s:%d> Sent to client response error; (%d)\n", __func__, __LINE__, n);
@@ -171,7 +171,7 @@ void send_message(Connect *req, String *hdrs, const char *msg)
             }
             else
             {
-                req->send_bytes = write_timeout(req->clientSocket, str_ptr(&html), req->respContentLength, conf->TimeOut);
+                req->send_bytes = write_timeout(req->clientSocket, str_ptr(&html), req->respContentLength, conf->TIMEOUT);
                 if(req->send_bytes <= 0)
                 {
                     print_err("<%s:%d> Error write_timeout()\n", __func__, __LINE__);

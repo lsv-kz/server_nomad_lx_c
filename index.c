@@ -52,7 +52,7 @@ int cmp(const void *a, const void *b)
 //======================================================================
 int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
 {
-    const int len_path = str_len(req->path);
+    const int len_path = str_len(&req->path);
     struct stat st;
     int chunk;
     if (req->reqMethod == M_HEAD)
@@ -127,15 +127,15 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
     for (int i = 0; (i < numFiles); i++)
     {
         char buf[1024];
-        str_cat(req->path, list[i]);
-        if (req->path->err)
+        str_cat(&req->path, list[i]);
+        if (req->path.err)
         {
             print__err(req, "<%s:%d> Error: Buffer Overflow: %s\n", __func__, __LINE__, list[i]);
             continue;
         }
 
-        int n = lstat(str_ptr(req->path), &st);
-        str_resize(req->path, len_path);
+        int n = lstat(str_ptr(&req->path), &st);
+        str_resize(&req->path, len_path);
         if ((n == -1) || !S_ISDIR (st.st_mode))
             continue;
 
@@ -164,15 +164,15 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
     for (int i = 0; i < numFiles; i++)
     {
         char buf[1024];
-        str_cat(req->path, list[i]);
-        if (req->path->err)
+        str_cat(&req->path, list[i]);
+        if (req->path.err)
         {
             print_err("<%s:%d> Error: Buffer Overflow: %s\n", __func__, __LINE__, list[i]);
             continue;
         }
 
-        int n = lstat(str_ptr(req->path), &st);
-        str_resize(req->path, len_path);
+        int n = lstat(str_ptr(&req->path), &st);
+        str_resize(&req->path, len_path);
         if ((n == -1) || (!S_ISREG (st.st_mode)))
             continue;
 
@@ -184,7 +184,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
 
         long long size = (long long)st.st_size;
 
-        if (isimage(list[i]) && (conf->ShowMediaFiles == 'y'))
+        if (isimage(list[i]) && (conf->SHOW_MEDIA_FILES == 'y'))
         {
             if (size < 8000LL)
             {
@@ -213,7 +213,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
                 }
             }
         }
-        else if (isaudiofile(list[i]) && (conf->ShowMediaFiles == 'y'))
+        else if (isaudiofile(list[i]) && (conf->SHOW_MEDIA_FILES == 'y'))
         {
             va_chunk_add_str(&chk, 7, "   <tr><td><audio preload=\"none\" controls src=\"", buf, 
                                 "\"></audio><a href=\"", buf, "\">", list[i], "</a></td><td align=\"right\">");
@@ -295,14 +295,14 @@ int read_dir(Connect *req)
     if (req->reqMethod == M_POST)
         return -RS405;
 
-    dir = opendir(str_ptr(req->path));
+    dir = opendir(str_ptr(&req->path));
     if (dir == NULL)
     {  
         if (errno == EACCES)
             return -RS403;
         else
         {
-            print__err(req, "<%s:%d> Error opendir(\"%s\"): %s\n", __func__, __LINE__, str_ptr(req->path), str_err(errno));
+            print__err(req, "<%s:%d> Error opendir(\"%s\"): %s\n", __func__, __LINE__, str_ptr(&req->path), str_err(errno));
             return -RS500;
         }
     }

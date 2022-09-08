@@ -11,7 +11,7 @@ pthread_cond_t cond_exit_thr = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t mtx_conn = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond_close_conn = PTHREAD_COND_INITIALIZER;
 
-static int count_thr = 0, count_conn = 0, size_list = 0, all_thr = 0, num_wait_thr = 0;
+static int count_thr = 0, count_conn = 0, size_list = 0, all_thr = 0, num_wait_thr = 0, all_req = 0;
 int stop_manager = 0, need_create_thr = 0;
 
 int get_num_cgi();
@@ -105,6 +105,7 @@ pthread_mutex_lock(&mtx_thr);
     else
         list_start = list_end = NULL;
     --size_list;
+    ++all_req;
 pthread_mutex_unlock(&mtx_thr);
     if (num_wait_thr <= 1)
         pthread_cond_signal(&cond_new_thr);
@@ -114,7 +115,7 @@ pthread_mutex_unlock(&mtx_thr);
 int wait_create_thr(int *n)
 {
 pthread_mutex_lock(&mtx_thr);
-    while (((size_list <= num_wait_thr) || (count_thr >= conf->MaxThreads)) && !stop_manager)
+    while (((size_list <= num_wait_thr) || (count_thr >= conf->MAX_THREADS)) && !stop_manager)
     {
         pthread_cond_wait(&cond_new_thr, &mtx_thr);
     }
@@ -127,7 +128,7 @@ pthread_mutex_unlock(&mtx_thr);
 int end_thr(int ret)
 {
 pthread_mutex_lock(&mtx_thr);
-    if (((count_thr > conf->MinThreads) && (size_list < num_wait_thr)) || ret)
+    if (((count_thr > conf->MIN_THREADS) && (size_list < num_wait_thr)) || ret)
     {
         --count_thr;
         ret = EXIT_THR;
@@ -166,7 +167,7 @@ void end_response(Connect *req)
 
         shutdown(req->clientSocket, SHUT_RDWR);
         close(req->clientSocket);
-        free(req);
+        free_req(req);
     pthread_mutex_lock(&mtx_conn);
         --count_conn;
     pthread_mutex_unlock(&mtx_conn);
@@ -193,21 +194,10 @@ void end_response(Connect *req)
         }
     #endif
         print_log(req);
-        req->timeout = conf->TimeoutKeepAlive;
+        req->timeout = conf->TIMEOUT_KEEP_ALIVE;
         ++req->numReq;
         push_pollin_list(req);
     }
-}
-//======================================================================
-int check_num_conn()
-{
-pthread_mutex_lock(&mtx_conn);
-    while (count_conn >= conf->MAX_REQUESTS)
-    {
-        pthread_cond_wait(&cond_close_conn, &mtx_conn);
-    }
-pthread_mutex_unlock(&mtx_conn);
-    return 0;
 }
 //======================================================================
 void *thread_client(void *req);
@@ -260,14 +250,14 @@ void *thr_create_manager(void *par)
     return NULL;
 }
 //======================================================================
-int servSock, uxSock;
-Connect *create_req(void);
+static int servSock, uxSock;
+static Connect *create_req(void);
 //======================================================================
-static void signal_handler(int sig)
+static void sig_handler(int sig)
 {
     if (sig == SIGINT)
     {
-        //print_err("[%d] <%s:%d> ### SIGINT ###\n", nProc, __func__, __LINE__);
+        print_err("[%d] <%s:%d> ### SIGINT ### all requests: %d\n", nProc, __func__, __LINE__, all_req);
         shutdown(servSock, SHUT_RDWR);
         close(servSock);
         shutdown(uxSock, SHUT_RDWR);
@@ -292,7 +282,7 @@ int manager(int sockServer, int numProc, int to_parent)
 
     if (remove(nameSock) == -1 && errno != ENOENT)
     {
-        print_err("[%n]<%s:%d> Error remove(%s): %s\n", numProc, __func__, __LINE__, nameSock, strerror(errno));
+        print_err("[%u]<%s:%d> Error remove(%s): %s\n", numProc, __func__, __LINE__, nameSock, strerror(errno));
         exit(1);
     }
 
@@ -312,36 +302,50 @@ int manager(int sockServer, int numProc, int to_parent)
     signal(SIGUSR1, SIG_IGN);
     signal(SIGUSR2, SIG_IGN);
 
-    if (signal(SIGINT, signal_handler) == SIG_ERR)
+    if (signal(SIGINT, sig_handler) == SIG_ERR)
     {
         print_err("<%s:%d> Error signal(SIGINT): %s\n", __func__, __LINE__, strerror(errno));
         exit(EXIT_FAILURE);
     }
 
-    if (signal(SIGSEGV, signal_handler) == SIG_ERR)
+    if (signal(SIGSEGV, sig_handler) == SIG_ERR)
     {
         print_err("<%s:%d> Error signal(SIGSEGV): %s\n", __func__, __LINE__, strerror(errno));
         exit(EXIT_FAILURE);
     }
     //------------------------------------------------------------------
-    if (chdir(conf->rootDir))
+    long max_fd, cur_fd;
+    if (get_lim_max_fd(&max_fd, &cur_fd) == -1)
+        return -1;
+    int min_open_fd = 9;
+    int m = min_open_fd + (conf->MAX_WORK_CONNECT * 2);
+    if (m > cur_fd)
     {
-        print_err("[%d] <%s:%d> Error chdir(%s): %s\n", numProc, __func__, __LINE__, conf->rootDir, strerror(errno));
+        n = set_max_fd(m);
+        if (n < 0)
+            return -1;
+        set_max_conn((n - min_open_fd)/2);
+    }
+    printf("<%s:%d> MAX_WORK_CONNECT=%d\n", __func__, __LINE__, conf->MAX_WORK_CONNECT);
+    //------------------------------------------------------------------
+    if (chdir(conf->ROOTDIR))
+    {
+        print_err("[%d] <%s:%d> Error chdir(%s): %s\n", numProc, __func__, __LINE__, conf->ROOTDIR, strerror(errno));
         exit(1);
     }
     //------------------------------------------------------------------
-    for (i = 0; i < conf->MinThreads; ++i)
+    for (i = 0; i < conf->MIN_THREADS; ++i)
     {
         n = create_thread(&numProc);
         if (n)
         {
-            print_err("<%s:%d> Error create_thread() %d \n", __func__, __LINE__, i);
+            print_err("<%s:%d> Error create_thread() %d\n", __func__, __LINE__, i);
             break;
         }
         num_thr = start_thr();
     }
 
-    if (get_num_thr() > conf->MinThreads)
+    if (get_num_thr() > conf->MIN_THREADS)
     {
         print_err("[%d:%s:%d] Error num threads=%d\n", numProc, __func__, __LINE__, get_num_thr());
         exit(1);
@@ -355,14 +359,14 @@ int manager(int sockServer, int numProc, int to_parent)
     n = pthread_create(&thr_handler, NULL, event_handler, par);
     if (n)
     {
-        printf("<%s:%d> Error pthread_create(send_file_): %s\n", __func__, __LINE__, strerror(n));
+        print_err("<%s:%d> Error pthread_create(event_handler): %s\n", __func__, __LINE__, strerror(n));
         exit(1);
     }
     //------------------------------------------------------------------
     n = pthread_create(&thr_man, NULL, thr_create_manager, par);
     if (n)
     {
-        printf("<%s> Error pthread_create(): %s\n", __func__, strerror(n));
+        print_err("<%s> Error pthread_create(): %s\n", __func__, strerror(n));
         exit(1);
     }
 
@@ -370,8 +374,10 @@ int manager(int sockServer, int numProc, int to_parent)
     {
         struct sockaddr_storage clientAddr;
         socklen_t addrSize = sizeof(struct sockaddr_storage);
+        char data[1] = "";
+        int sz = sizeof(data);
 
-        int clientSocket = recv_fd(unixSock, numProc, &clientAddr, (int*)&addrSize);
+        int clientSocket = recv_fd(unixSock, numProc, data, (int*)&sz);
         if (clientSocket < 0)
         {
             print_err("[%d]<%s:%d> Error recv_fd()\n", numProc, __func__, __LINE__);
@@ -390,13 +396,17 @@ int manager(int sockServer, int numProc, int to_parent)
         int opt = 1;
         ioctl(clientSocket, FIONBIO, &opt);
 
+        req->path = str_init(0);
+        req->scriptName = str_init(0);
+
         req->numProc = numProc;
         req->numConn = allConn++;
         req->numReq = 0;
         req->serverSocket = sockServer;
         req->clientSocket = clientSocket;
-        req->timeout = conf->TimeOut;
+        req->timeout = conf->TIMEOUT;
         req->remoteAddr[0] = '\0';
+        getpeername(clientSocket,(struct sockaddr *)&clientAddr, &addrSize);
         n = getnameinfo((struct sockaddr *)&clientAddr, 
                 addrSize, 
                 req->remoteAddr, 
@@ -430,4 +440,11 @@ Connect *create_req(void)
     if (!req)
         print_err("<%s:%d> Error malloc(): %s(%d)\n", __func__, __LINE__, str_err(errno), errno);
     return req;
+}
+//======================================================================
+void free_req(Connect *req)
+{
+    str_free(&req->path);
+    str_free(&req->scriptName);
+    free(req);
 }

@@ -83,7 +83,7 @@ void send_par(fcgi_param *par, int end)
         end = 0;
     }
     
-    int n = write_timeout(par->fcgi_sock, par->buf, 8 + par->lenBuf, conf->TimeoutCGI);
+    int n = write_timeout(par->fcgi_sock, par->buf, 8 + par->lenBuf, conf->TIMEOUT_CGI);
     if (n == -1)
     {
         par->err = 1;
@@ -231,7 +231,7 @@ int tail_to_fcgi(int fcgi_sock, char *tail, int lenTail)
         padding = (padding == 8) ? 0 : padding;
         fcgi_set_header(buf, FCGI_STDIN, requestId, rd, padding);
         
-        wr = write_timeout(fcgi_sock, buf, rd + 8 + padding, conf->TimeoutCGI);
+        wr = write_timeout(fcgi_sock, buf, rd + 8 + padding, conf->TIMEOUT_CGI);
         if ((wr == -1) || ((rd + 8 + (int)padding) != wr))
         {
             return -1;
@@ -252,9 +252,9 @@ int client_to_fcgi(int sock_cl, int fcgi_sock, int contentLength)
     while(contentLength > 0)
     {
         if (contentLength > size_buf)
-            rd = read_timeout(sock_cl, buf + 8, size_buf, conf->TimeOut);
+            rd = read_timeout(sock_cl, buf + 8, size_buf, conf->TIMEOUT);
         else
-            rd = read_timeout(sock_cl, buf + 8, contentLength, conf->TimeOut);
+            rd = read_timeout(sock_cl, buf + 8, contentLength, conf->TIMEOUT);
         if (rd <= 0)
         {
             return -1;
@@ -264,7 +264,7 @@ int client_to_fcgi(int sock_cl, int fcgi_sock, int contentLength)
         padding = (padding == 8) ? 0 : padding;
         fcgi_set_header(buf, FCGI_STDIN, requestId, rd, padding);
         
-        wr = write_timeout(fcgi_sock, buf, rd + 8 + padding, conf->TimeoutCGI);
+        wr = write_timeout(fcgi_sock, buf, rd + 8 + padding, conf->TIMEOUT_CGI);
         if (wr == -1)
         {
             return -1;
@@ -279,7 +279,7 @@ int fcgi_get_header(int fcgi_sock, fcgi_header *header)
     int n;
     char buf[8];
     
-    n = read_timeout(fcgi_sock, buf, 8, conf->TimeoutCGI);
+    n = read_timeout(fcgi_sock, buf, 8, conf->TIMEOUT_CGI);
     if (n <= 0)
         return n;
     
@@ -340,7 +340,7 @@ int fcgi_chunk(Connect *req, String *hdrs, int fcgi_sock, fcgi_header *header, c
     
     if (header->padding_len > 0)
     {
-        n = fcgi_read_padding(fcgi_sock, header->padding_len, conf->TimeoutCGI);
+        n = fcgi_read_padding(fcgi_sock, header->padding_len, conf->TIMEOUT_CGI);
         if (n < 0)
         {
             print_err("<%s:%d> read_timeout()=%d\n", __func__, __LINE__, n);
@@ -359,7 +359,7 @@ int fcgi_chunk(Connect *req, String *hdrs, int fcgi_sock, fcgi_header *header, c
 
         if (header->type == FCGI_END_REQUEST)
         {
-            n = fcgi_read_padding(fcgi_sock, header->len + header->padding_len, conf->TimeoutCGI);
+            n = fcgi_read_padding(fcgi_sock, header->len + header->padding_len, conf->TIMEOUT_CGI);
             if (n < 0)
             {
                 print_err("<%s:%d> read_timeout()=%d\n", __func__, __LINE__, n);
@@ -383,7 +383,7 @@ int fcgi_chunk(Connect *req, String *hdrs, int fcgi_sock, fcgi_header *header, c
         
         if (header->padding_len > 0)
         {
-            n = fcgi_read_padding(fcgi_sock, header->padding_len, conf->TimeoutCGI);
+            n = fcgi_read_padding(fcgi_sock, header->padding_len, conf->TIMEOUT_CGI);
             if (n == -1)
             {
                 print_err("<%s:%d> read_timeout()=%d\n", __func__, __LINE__, n);
@@ -436,7 +436,7 @@ int fcgi_read_headers(Connect *req, String *hdrs, int fcgi_sock)
             break;
         else if (header.type == FCGI_STDERR)
         {
-            n = fcgi_read_stderr(fcgi_sock, header.len, conf->TimeoutCGI);
+            n = fcgi_read_stderr(fcgi_sock, header.len, conf->TIMEOUT_CGI);
             if (n <= 0)
             {
                 err_str = "Error: fcgi_read_stderr()";
@@ -447,7 +447,7 @@ int fcgi_read_headers(Connect *req, String *hdrs, int fcgi_sock)
             
             if (header.padding_len > 0)
             {
-                n = fcgi_read_padding(fcgi_sock, header.padding_len, conf->TimeoutCGI);
+                n = fcgi_read_padding(fcgi_sock, header.padding_len, conf->TIMEOUT_CGI);
                 if (n <= 0)
                 {
                     err_str = "Error: fcgi_read_padding()";
@@ -508,7 +508,7 @@ int fcgi_read_headers(Connect *req, String *hdrs, int fcgi_sock)
             if (header.len < rd)
                 rd = header.len;
 
-            int ret = read_timeout(fcgi_sock, buf + i, rd, conf->TimeoutCGI);
+            int ret = read_timeout(fcgi_sock, buf + i, rd, conf->TIMEOUT_CGI);
             if (ret <= 0)
             {
                 print__err(req, "<%s:%d> read_from_script()=%d, read_len=%d\n", __func__, __LINE__, ret, rd);
@@ -604,7 +604,7 @@ int send_param(Connect *req, int fcgi_sock)
     buf[14]=0;
     buf[15]=0;
     
-    ret = write_timeout(fcgi_sock, buf, 16, conf->TimeoutCGI);
+    ret = write_timeout(fcgi_sock, buf, 16, conf->TIMEOUT_CGI);
     if (ret == -1)
     {
         print_err("<%s:%d> Error write_timeout(): %s\n", __func__, __LINE__, strerror(errno));
@@ -614,9 +614,9 @@ int send_param(Connect *req, int fcgi_sock)
     fcgi_param par = init_fcgi_struct(fcgi_sock, buf, sizeof(buf));
     
     add_param(&par, "PATH", "/bin:/usr/bin:/usr/local/bin");
-    add_param(&par, "SERVER_SOFTWARE", conf->ServerSoftware);
+    add_param(&par, "SERVER_SOFTWARE", conf->SERVER_SOFTWARE);
     add_param(&par, "GATEWAY_INTERFACE", "CGI/1.1");
-    add_param(&par, "DOCUMENT_ROOT", conf->rootDir);
+    add_param(&par, "DOCUMENT_ROOT", conf->ROOTDIR);
     add_param(&par, "REMOTE_ADDR", req->remoteAddr);
     add_param(&par, "REQUEST_URI", req->uri);
     
@@ -639,7 +639,7 @@ int send_param(Connect *req, int fcgi_sock)
     add_param(&par, "SCRIPT_NAME", req->decodeUri);
     
     if (req->scriptType == php_fpm)
-        add_param(&par, "SCRIPT_FILENAME", str_ptr(req->path));
+        add_param(&par, "SCRIPT_FILENAME", str_ptr(&req->path));
     
     if(req->reqMethod == M_POST)
     {
@@ -680,7 +680,7 @@ int send_param(Connect *req, int fcgi_sock)
     }
     
     fcgi_set_header(buf, FCGI_STDIN, requestId, 0, 0);
-    ret = write_timeout(fcgi_sock, buf, 8, conf->TimeoutCGI);
+    ret = write_timeout(fcgi_sock, buf, 8, conf->TIMEOUT_CGI);
     if (ret < 0)
     {
         print__err(req, "<%s:%d> Error client_to_fcgi()\n", __func__, __LINE__);
@@ -726,7 +726,7 @@ int fcgi(Connect *req)
             req->req_hd.reqContentLength = 0;
         }
 
-        if(req->req_hd.reqContentLength > conf->ClientMaxBodySize)
+        if(req->req_hd.reqContentLength > conf->CLIENT_MAX_BODY_SIZE)
         {
             print_err("<%s:%d> 413 Request entity too large: %lld\n", __func__, __LINE__, req->req_hd.reqContentLength);
             return -RS413;
@@ -745,7 +745,7 @@ int fcgi(Connect *req)
     }
     else if (req->scriptType == fast_cgi)
     {
-        sock_fcgi = get_sock_fcgi(req->scriptName);
+        sock_fcgi = get_sock_fcgi(str_ptr(&req->scriptName));
     }
     else
     {

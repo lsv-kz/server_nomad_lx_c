@@ -12,15 +12,15 @@ static Connect *list_end = NULL;
 static Connect *list_new_start = NULL;
 static Connect *list_new_end = NULL;
 
-static Connect **array_conn = NULL;
-static struct pollfd *arr_pollfd;
+static Connect **conn_array;
+static struct pollfd *pollfd_arr;
 
 static pthread_mutex_t mtx_ = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cond_ = PTHREAD_COND_INITIALIZER;
 
 static int close_thr = 0;
-int size_buf;
-char *snd_buf;
+static int size_buf;
+static char *snd_buf;
 //======================================================================
 int send_part_file(Connect *req)
 {
@@ -42,7 +42,7 @@ int send_part_file(Connect *req)
         {
             if (errno == EAGAIN)
                 return -EAGAIN;
-            print__err(req, "<%s:%d> Error sendfile(); %s\n", __func__, __LINE__, strerror(errno));
+            print__err(req, "<%s:%d> Error sendfile(): %s\n", __func__, __LINE__, strerror(errno));
             return wr;
         }
     #elif defined(FREEBSD_)
@@ -184,9 +184,9 @@ pthread_mutex_unlock(&mtx_);
             if (r->sock_timer == 0)
                 r->sock_timer = t;
             
-            arr_pollfd[i].fd = r->clientSocket;
-            arr_pollfd[i].events = r->event;
-            array_conn[i] = r;
+            pollfd_arr[i].fd = r->clientSocket;
+            pollfd_arr[i].events = r->event;
+            conn_array[i] = r;
             ++i;
         }
     }
@@ -196,7 +196,7 @@ pthread_mutex_unlock(&mtx_);
 //======================================================================
 int poll_(int num_chld, int i, int nfd)
 {
-    int ret = poll(arr_pollfd + i, nfd, conf->TIMEOUT_POLL);
+    int ret = poll(pollfd_arr + i, nfd, conf->TIMEOUT_POLL);
     if (ret == -1)
     {
         print_err("[%d]<%s:%d> Error poll(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
@@ -208,8 +208,8 @@ int poll_(int num_chld, int i, int nfd)
     Connect *r = NULL;
     for ( ; (i < nfd) && (ret > 0); ++i)
     {
-        r = array_conn[i];
-        if (arr_pollfd[i].revents == POLLOUT)
+        r = conn_array[i];
+        if (pollfd_arr[i].revents == POLLOUT)
         {
             int wr = send_part_file(r);
             if (wr == 0)
@@ -235,7 +235,7 @@ int poll_(int num_chld, int i, int nfd)
             }
             --ret;
         }
-        else if (arr_pollfd[i].revents == POLLIN)
+        else if (pollfd_arr[i].revents == POLLIN)
         {
             int n = hd_read(r);
             if (n == -EAGAIN)
@@ -255,9 +255,9 @@ int poll_(int num_chld, int i, int nfd)
                 r->sock_timer = 0;
             --ret;
         }
-        else if (arr_pollfd[i].revents)
+        else if (pollfd_arr[i].revents)
         {
-            print__err(r, "<%s:%d> Error: events=0x%x, revents=0x%x\n", __func__, __LINE__, arr_pollfd[i].events, arr_pollfd[i].revents);
+            print__err(r, "<%s:%d> Error: events=0x%x, revents=0x%x\n", __func__, __LINE__, pollfd_arr[i].events, pollfd_arr[i].revents);
             if (r->event == POLLOUT)
             {
                 r->req_hd.iReferer = MAX_HEADERS - 1;
@@ -280,14 +280,13 @@ void *event_handler(void *arg)
 {
     int num_chld = *((int*)arg);
     int count_resp = 0;
-    size_buf = conf->SEND_FILE_SIZE_PART;
+    size_buf = conf->SNDBUF_SIZE;
     snd_buf = NULL;
 
 #if defined(SEND_FILE_) && (defined(LINUX_) || defined(FREEBSD_))
     if (conf->SEND_FILE != 'y')
 #endif
     {
-        size_buf = conf->SNDBUF_SIZE;
         snd_buf = malloc(size_buf);
         if (!snd_buf)
         {
@@ -296,15 +295,15 @@ void *event_handler(void *arg)
         }
     }
 
-    arr_pollfd = malloc(sizeof(struct pollfd) * conf->MAX_REQUESTS);
-    if (!arr_pollfd)
+    pollfd_arr = malloc(sizeof(struct pollfd) * conf->MAX_WORK_CONNECT);
+    if (!pollfd_arr)
     {
         print_err("[%d]<%s:%d> Error malloc(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
         exit(1);
     }
 
-    array_conn = malloc(sizeof(Connect*) * conf->MAX_REQUESTS);
-    if (!array_conn)
+    conn_array = malloc(sizeof(Connect*) * conf->MAX_WORK_CONNECT);
+    if (!conn_array)
     {
         print_err("[%d]<%s:%d> Error malloc(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
         exit(1);
@@ -329,8 +328,8 @@ pthread_mutex_unlock(&mtx_);
         int nfd;
         for (int i = 0; count_resp > 0; )
         {
-            if (count_resp > conf->MAX_EVENT_SOCK)
-                nfd = conf->MAX_EVENT_SOCK;
+            if (count_resp > conf->MAX_EVENT_CONNECT)
+                nfd = conf->MAX_EVENT_CONNECT;
             else
                 nfd = count_resp;
 
@@ -348,8 +347,8 @@ pthread_mutex_unlock(&mtx_);
         }
     }
 
-    free(arr_pollfd);
-    free(array_conn);
+    free(pollfd_arr);
+    free(conn_array);
 #if defined(SEND_FILE_) && (defined(LINUX_) || defined(FREEBSD_))
     if (conf->SEND_FILE != 'y')
 #endif
@@ -406,6 +405,9 @@ void close_event_handler(void)
 //======================================================================
 void init_struct_request(Connect *req)
 {
+    //str_free(&req->path);
+    //str_free(&req->scriptName);
+    
     req->bufReq[0] = '\0';
     req->decodeUri[0] = '\0';
     req->sLogTime[0] = '\0';
@@ -414,8 +416,6 @@ void init_struct_request(Connect *req)
     req->sReqParam = NULL;
     req->reqHeadersName[0] = NULL;
     req->reqHeadersValue[0] = NULL;
-    req->path = NULL;
-    req->scriptName = NULL;
     req->i_bufReq = 0;
     req->lenTail = 0;
     req->sizePath = 0;

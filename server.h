@@ -67,7 +67,8 @@ enum {
 
 enum { HTTP09 = 1, HTTP10, HTTP11, HTTP2 };
 
-enum { cgi_ex = 1, php_cgi, cgi_ex2, php_fpm, fast_cgi};
+enum {CGI_, PHP_};
+enum { cgi_ex = 1, php_cgi, php_fpm, fast_cgi};
 
 enum { EXIT_THR = 1};
 //----------------------------------------------------------------------
@@ -86,45 +87,46 @@ typedef struct {
 //======================================================================
 typedef struct Config
 {
-    char ServerSoftware[48];
-    char host[128];
-    char servPort[16];
+    char SERVER_SOFTWARE[48];
+    char SERVER_ADDR[128];
+    char SERVER_PORT[16];
 
-    char rootDir[MAX_PATH];
-    char cgiDir[MAX_PATH];
-    char logDir[MAX_PATH];
-    char pidDir[MAX_PATH - 8];
+    char ROOTDIR[MAX_PATH];
+    char CGIDIR[MAX_PATH];
+    char LOGDIR[MAX_PATH];
+    char PIDDIR[512];
 
     char UsePHP[16];
     char PathPHP[MAX_PATH];
 
-    int ListenBacklog;
+    int LISTEN_BACKLOG;
     char tcp_cork;
-    char TcpNoDelay;
+    char tcp_nodelay;
 
     char SEND_FILE;
-    long SEND_FILE_SIZE_PART;
     int SNDBUF_SIZE;
-    int MAX_EVENT_SOCK;
-    int MAX_REQUESTS;
+    int MAX_EVENT_CONNECT;
+    
+    int SIZE_QUEUE_CONNECT;
+    int MAX_WORK_CONNECT;
 
-    int NumProc;
-    int MaxThreads;
-    int MinThreads;
-    int MaxRequestsPerThr;
-    int MaxProcCgi;
+    int NUM_PROC;
+    int MAX_THREADS;
+    int MIN_THREADS;
+    int MAX_REQUESTS_PER_THR;
+    int MAX_PROC_CGI;
 
-    char KeepAlive;
+    char KEEP_ALIVE;
+    int TIMEOUT_KEEP_ALIVE;
+    int TIMEOUT;
+    int TIMEOUT_CGI;
     int TIMEOUT_POLL;
-    int TimeoutKeepAlive;
-    int TimeOut;
-    int TimeoutCGI;
 
-    int MaxRanges;
+    int MAX_RANGES;
 
-    long int ClientMaxBodySize;
+    long int CLIENT_MAX_BODY_SIZE;
 
-    char ShowMediaFiles;
+    char SHOW_MEDIA_FILES;
 
     char index_html;
     char index_php;
@@ -199,8 +201,8 @@ typedef struct Connect{
     char *reqHeadersName[MAX_HEADERS + 1];
     const char *reqHeadersValue[MAX_HEADERS + 1];
 
-    const char *scriptName;
-    String *path;
+    String scriptName;
+    String path;
     int  sizePath;
 
     int  scriptType;
@@ -304,6 +306,7 @@ Connect *pop_resp_list(void);
 void end_response(Connect *req);
 void free_range(Connect *r);
 int end_thr(int);
+void free_req(Connect *req);
 //----------------------------------------------------------------------
 int timedwait_close_cgi(void);
 void cgi_dec();
@@ -317,7 +320,9 @@ int fcgi_to_client(chunked *chk, int fdPipe, int len);
 //----------------------------------------------------------------------
 String str_init(unsigned int n);
 void str_free(String *s);
+void str_reserve(String *s, unsigned int n);
 void str_resize(String *s, unsigned int n);
+void str_cpy(String *s, const char *cs);
 void str_cat(String *s, const char *cs);
 void str_cat_ln(String *s, const char *cs);
 void str_llint(String *s, long long ll);
@@ -326,10 +331,15 @@ const char *str_ptr(String *s);
 int str_len(String *s);
 //----------------------------------------------------------------------
 void free_fcgi_list();
+void set_max_conn(int n);
+long get_lim_max_fd(long *max, long *cur);
+int set_max_fd(int min_open_fd);
 //----------------------------------------------------------------------
 void *event_handler(void *arg);
 void push_pollout_list(Connect *req);
 void push_pollin_list(Connect *req);
 void close_event_handler(void);
+//----------------------------------------------------------------------
+void close_manager();
 
 #endif

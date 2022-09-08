@@ -813,6 +813,8 @@ const char *str_err(int i)
             return "Connection timed out";
         case ECONNREFUSED: // 111
             return "Connection refused";
+        case EINPROGRESS: // 115
+            return "Operation now in progress";
         
         default:
             print_err("<%s:%d> ernno = %d\n", __func__, __LINE__, i);

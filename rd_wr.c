@@ -118,7 +118,7 @@ int client_to_script(int fd_in, int fd_out, long long *cont_len, int num_thr)
 
     for( ; *cont_len > 0; )
     {
-        rd = read_timeout(fd_in, buf, (*cont_len > sizeof(buf)) ? sizeof(buf) : *cont_len, conf->TimeOut);
+        rd = read_timeout(fd_in, buf, (*cont_len > sizeof(buf)) ? sizeof(buf) : *cont_len, conf->TIMEOUT);
         if(rd == -1)
         {
             if (errno == EINTR)
@@ -129,7 +129,7 @@ int client_to_script(int fd_in, int fd_out, long long *cont_len, int num_thr)
             break;
         *cont_len -= rd;
 
-        wr = write_timeout(fd_out, buf, rd, conf->TimeoutCGI);
+        wr = write_timeout(fd_out, buf, rd, conf->TIMEOUT_CGI);
         if(wr <= 0)
             return wr;
         wr_bytes += wr;
@@ -146,7 +146,7 @@ long client_to_cosmos(int fd_in, long size)
 
     for (; size > 0; )
     {
-        rd = read_timeout(fd_in, buf, (size > sizeof(buf)) ? sizeof(buf) : size, conf->TimeOut);
+        rd = read_timeout(fd_in, buf, (size > sizeof(buf)) ? sizeof(buf) : size, conf->TIMEOUT);
         if(rd == -1)
         {
             if (errno == EINTR)
@@ -243,7 +243,7 @@ int fcgi_read_stderr(int fd_in, int cont_len, int timeout)
 
     for ( ; cont_len > 0; )
     {
-        rd = read_timeout(fd_in, buf, cont_len > (int)sizeof(buf) ? (int)sizeof(buf) : cont_len, conf->TimeOut);
+        rd = read_timeout(fd_in, buf, cont_len > (int)sizeof(buf) ? (int)sizeof(buf) : cont_len, conf->TIMEOUT);
         if (rd == -1)
         {
             print_err("<%s:%d> Error read_timeout()=%d\n", __func__, __LINE__, rd);
@@ -292,7 +292,7 @@ int send_file_ux(int fd_out, int fd_in, char *buf, int *size, off_t offset, long
             break;
         }
 
-        wr = write_timeout(fd_out, buf, rd, conf->TimeOut);
+        wr = write_timeout(fd_out, buf, rd, conf->TIMEOUT);
         if(wr <= 0)
         {
             print_err("<%s:%d> Error write_to_sock()=%d\n", __func__, __LINE__, wr);
@@ -310,7 +310,11 @@ int hd_read(Connect *req)
 {
     int n = recv(req->clientSocket, req->bufReq + req->i_bufReq, LEN_BUF_REQUEST - req->i_bufReq - 1, 0);
     if (n < 0)
+    {
+        if (errno == EAGAIN)
+            return -EAGAIN;
         return -1;
+    }
     else if (n == 0)
         return NO_PRINT_LOG;
 
@@ -332,7 +336,7 @@ int hd_read(Connect *req)
 //======================================================================
 int empty_line(Connect *req)
 {
-    req->timeout = conf->TimeOut;
+    req->timeout = conf->TIMEOUT;
     char *pr, *pn, ch;
     while (req->lenTail > 0)
     {

@@ -1,6 +1,5 @@
 #include "server.h"
 
-void init_struct_request(Connect *req);
 int response2(Connect *req);
 //======================================================================
 void response1(int num_chld)
@@ -21,7 +20,7 @@ void response1(int num_chld)
         else if (req->clientSocket < 0)
         {
             end_thr(1);
-            free(req);
+            free_req(req);
             return;
         }
         //--------------------------------------------------------------
@@ -62,7 +61,7 @@ void response1(int num_chld)
             goto end;
         }
 
-        if (req->numReq >= conf->MaxRequestsPerThr || (conf->KeepAlive == 'n') || (req->httpProt == HTTP10))
+        if (req->numReq >= conf->MAX_REQUESTS_PER_THR || (conf->KEEP_ALIVE == 'n') || (req->httpProt == HTTP10))
             req->connKeepAlive = 0;
         else if (req->req_hd.iConnection == -1)
             req->connKeepAlive = 1;
@@ -112,31 +111,19 @@ void response1(int num_chld)
         //--------------------------------------------------------------
         if ((req->reqMethod == M_GET) || (req->reqMethod == M_HEAD) || (req->reqMethod == M_POST))
         {
-            lenRootDir = strlen(conf->rootDir);
-            lenCgiDir = strlen(conf->cgiDir);
+            lenRootDir = strlen(conf->ROOTDIR);
+            lenCgiDir = strlen(conf->CGIDIR);
             if ((lenCgiDir - lenRootDir) < 0)
                 req->sizePath = lenRootDir + req->lenDecodeUri + 256 + 1;
             else
                 req->sizePath = lenCgiDir + req->lenDecodeUri + 256 + 1;
 
-            String Path = str_init(req->sizePath);
-            if (Path.err == 0)
+            str_cpy(&req->path, conf->ROOTDIR);
+            str_cat(&req->path, req->decodeUri);
+            if (req->path.err == 0)
             {
-                str_cat(&Path, conf->rootDir);
-                str_cat(&Path, req->decodeUri);
-                if (Path.err)
-                {
-                    print_err("<%s:%d> Error Path\n", __func__, __LINE__);
-                    str_free(&Path);
-                    return;
-                }
-                req->path = &Path;
-            //    if (str(&Path)[str_len(&Path)] == '/')
-            //        str_resize(&Path, str_len(&Path) - 1);
                 int ret = response2(req);
-                str_free(&Path);
                 free_range(req);
-                req->path = NULL;
                 if (ret == 1)
                 {// "req" may be free
                     int ret = end_thr(0);
@@ -145,8 +132,8 @@ void response1(int num_chld)
                     else
                         continue;
                 }
-                
-                req->sizePath = 0;
+                else
+                    req->sizePath = 0;
                 req->err = ret;
             }
             else
@@ -154,7 +141,6 @@ void response1(int num_chld)
                 print_err("<%s:%d> Error: malloc()\n", __func__, __LINE__);
                 req->err = -1;
             }
-        
         }
         else if (req->reqMethod == M_OPTIONS)
             req->err = options(req);
@@ -204,8 +190,9 @@ long long file_size(const char *s)
 int fastcgi(Connect* req, const char* uri)
 {
     const char* p = strrchr(uri, '/');
-    if (!p) return -RS404;
-    
+    if (!p)
+        return -RS404;
+
     fcgi_list_addr* i = conf->fcgi_list;
     for (; i; i = i->next)
     {
@@ -224,10 +211,9 @@ int fastcgi(Connect* req, const char* uri)
     if (!i)
         return -RS404;
     req->scriptType = fast_cgi;
-    req->scriptName = i->scrpt_name;
-    int ret = fcgi(req);
-    req->scriptName = NULL;
-    return ret;
+    str_cpy(&req->scriptName, i->scrpt_name);
+
+    return fcgi(req);
 }
 //======================================================================
 int response2(Connect *req)
@@ -243,22 +229,13 @@ int response2(Connect *req)
             print_err("<%s:%d> Not found: %s\n", __func__, __LINE__, req->decodeUri);
             return -RS404;
         }
-        
+
         if (stat(req->decodeUri + 1, &st) == -1)
         {
             print_err("<%s:%d> script (%s) not found\n", __func__, __LINE__, req->decodeUri);
             return -RS404;
         }
-        
-        String scriptName = str_init(req->lenDecodeUri + 1);
-        if (scriptName.err)
-        {
-            print_err("<%s:%d> Error: malloc()\n", __func__, __LINE__);
-            return -RS500;
-        }
-        str_cat(&scriptName, req->decodeUri);
-        req->scriptName = str_ptr(&scriptName);
-        
+
         if (!strcmp(conf->UsePHP, "php-fpm"))
         {
             req->scriptType = php_fpm;
@@ -270,32 +247,22 @@ int response2(Connect *req)
             ret = cgi(req);
         }
         else
-            ret = -1;
-        str_free(&scriptName);
-        req->scriptName = NULL;
+        {
+            print_err("<%s:%d> PHP not implemented\n", __func__, __LINE__);
+            ret = -RS500;
+        }
+
         return ret;
     }
-    
+
     if (!strncmp(req->decodeUri, "/cgi-bin/", 9) 
         || !strncmp(req->decodeUri, "/cgi/", 5))
     {
-        int ret;
         req->scriptType = cgi_ex;
-        String scriptName = str_init(req->lenDecodeUri + 1);
-        if (scriptName.err)
-        {
-            print_err("<%s:%d> Error: malloc()\n", __func__, __LINE__);
-            return -RS500;
-        }
-        str_cat(&scriptName, req->decodeUri);
-        req->scriptName = str_ptr(&scriptName);
-        ret = cgi(req);
-        str_free(&scriptName);
-        req->scriptName = NULL;
-        return ret;
+        return cgi(req);
     }
     //------------------------------------------------------------------
-    if (lstat(str_ptr(req->path), &st) == -1)
+    if (lstat(str_ptr(&req->path), &st) == -1)
     {
         if (errno == EACCES)
             return -RS403;
@@ -317,14 +284,14 @@ int response2(Connect *req)
             req->uri[req->uriLen++] = '/';
             req->uri[req->uriLen] = '\0';
             req->respStatus = RS301;
-            
+
             String hdrs = str_init(200); // str_free(&hdrs);
-            str_cat(&hdrs, "Location: ");
+            str_cpy(&hdrs, "Location: ");
             str_cat_ln(&hdrs, req->uri);
             if (hdrs.err == 0)
             {
                 String s = str_init(256); // str_free(&s);
-                str_cat(&s, "The document has moved <a href=\"");
+                str_cpy(&s, "The document has moved <a href=\"");
                 str_cat(&s, req->uri);
                 str_cat(&s, "\">here</a>.");
                 if (s.err == 0)
@@ -337,79 +304,67 @@ int response2(Connect *req)
             }
             else
                 print_err("<%s:%d> Error: malloc()\n", __func__, __LINE__);
-            
+
             str_free(&hdrs);
             return 0;
         }
         //..............................................................
-        int lenPath = str_len(req->path);
-        str_cat(req->path, "index.html");
-        if (req->path->err)
+        int lenPath = str_len(&req->path);
+        str_cat(&req->path, "index.html");
+        if (req->path.err)
         {
             print_err("<%s:%d> ---\n", __func__, __LINE__);
             return -RS500;
         }
 
-        if ((stat(str_ptr(req->path), &st) != 0) || (conf->index_html != 'y'))
+        if ((stat(str_ptr(&req->path), &st) != 0) || (conf->index_html != 'y'))
         {
             errno = 0;
-            
-            int ret;
+
             if (strcmp(conf->UsePHP, "n") && (conf->index_php == 'y'))
             {
-                str_resize(req->path, lenPath);
-                char *NameScript = "index.php";
-                int lenNameScript = strlen(NameScript);
-                str_cat(req->path, "index.php");
-                if (!stat(str_ptr(req->path), &st))
+                str_resize(&req->path, lenPath);
+                const char *NameScript = "index.php";
+                str_cat(&req->path, "index.php");
+                if (!stat(str_ptr(&req->path), &st))
                 {
-                    String scriptName = str_init(req->uriLen + lenNameScript + 1);
-                    if (scriptName.err == 0)
+                    str_reserve(&req->scriptName, strlen(NameScript) + 1);
+                    str_cpy(&req->scriptName, req->decodeUri);
+                    str_cat(&req->scriptName, NameScript);
+                    if (req->scriptName.err == 0)
                     {
-                        str_cat(&scriptName, req->decodeUri);
-                        str_cat(&scriptName, NameScript);
-                        if (scriptName.err == 0)
+                        if (!strcmp(conf->UsePHP, "php-fpm"))
                         {
-                            req->scriptName = str_ptr(&scriptName);
-                            if (!strcmp(conf->UsePHP, "php-fpm"))
-                            {
-                                req->scriptType = php_fpm;
-                                ret = fcgi(req);
-                            }
-                            else if (!strcmp(conf->UsePHP, "php-cgi"))
-                            {
-                                req->scriptType = php_cgi;
-                                ret = cgi(req);
-                            }
-                            else
-                                ret = -1;
+                            req->scriptType = php_fpm;
+                            return fcgi(req);
+                        }
+                        else if (!strcmp(conf->UsePHP, "php-cgi"))
+                        {
+                            req->scriptType = php_cgi;
+                            return cgi(req);
                         }
                         else
-                            ret = -1;
-                        str_free(&scriptName);
-                        req->scriptName = NULL;
-                        return ret;
+                        {
+                            print__err(req, "<%s:%d> Error UsePHP: %s\n", __func__, __LINE__, conf->UsePHP);
+                            return -1;
+                        }
                     }
                 }
             }
 
-            str_resize(req->path, lenPath);
+            str_resize(&req->path, lenPath);
 
             if (conf->index_pl == 'y')
             {
                 req->scriptType = cgi_ex;
-                req->scriptName = "/cgi-bin/index.pl";
-                ret = cgi(req);
-                req->scriptName = NULL;
-                return ret;
+                str_cpy(&req->scriptName, "/cgi-bin/index.pl");
+                return cgi(req);
             }
             else if (conf->index_fcgi == 'y')
             {
                 req->scriptType = fast_cgi;
-                req->scriptName = "/index.fcgi";
-                ret = fcgi(req);
-                req->scriptName = NULL;
-                return ret;
+                str_cpy(&req->scriptName, "/index.fcgi");
+                return fcgi(req);
             }
 
             return read_dir(req);
@@ -419,9 +374,9 @@ int response2(Connect *req)
     if (req->reqMethod == M_POST)
         return -RS405;
     //----------------------- send file --------------------------------
-    req->fileSize = file_size(str_ptr(req->path));
+    req->fileSize = file_size(str_ptr(&req->path));
     req->numPart = 0;
-    req->respContentType = content_type(str_ptr(req->path));
+    req->respContentType = content_type(str_ptr(&req->path));
 
     if (req->req_hd.iRange >= 0)
     {
@@ -459,14 +414,14 @@ int response2(Connect *req)
         }
     }
 
-    req->fd = open(str_ptr(req->path), O_RDONLY);
+    req->fd = open(str_ptr(&req->path), O_RDONLY);
     if (req->fd == -1)
     {
         if (errno == EACCES)
             return -RS403;
         else if (errno == EMFILE)
         {
-            print_err("<%s:%d> Error open(%s): %s\n", __func__, __LINE__, str_ptr(req->path), strerror(errno));
+            print_err("<%s:%d> Error open(%s): %s\n", __func__, __LINE__, str_ptr(&req->path), strerror(errno));
             return -1;
         }
         else
@@ -554,7 +509,7 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
             return -1;
         } 
 
-        n = write_timeout(req->clientSocket, buf, strlen(buf), conf->TimeOut);
+        n = write_timeout(req->clientSocket, buf, strlen(buf), conf->TIMEOUT);
         if (n < 0)
         {
             print_err("<%s:%d> Error: Sent %lld bytes\n", __func__, __LINE__, send_all_bytes);
@@ -574,7 +529,7 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
     }
 
     snprintf(buf, sizeof(buf), "\r\n--%s--\r\n", boundary);
-    n = write_timeout(req->clientSocket, buf, strlen(buf), conf->TimeOut);
+    n = write_timeout(req->clientSocket, buf, strlen(buf), conf->TIMEOUT);
     req->send_bytes = send_all_bytes + n;
     if (n < 0)
     {

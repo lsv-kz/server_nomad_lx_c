@@ -18,15 +18,22 @@ static int run = 1;
 static unsigned int all_conn = 0;
 static char name_sig_sock[32];
 static char pidFile[MAX_PATH];
-static int get_sig = 0;
-enum { RESTART_SIG = 1, CLOSE_SIG,};
+static char received_sig = 0;
+enum { RESTART_SIG_ = 1, CLOSE_SIG_,};
 //======================================================================
-static void signal_handler(int sig)
+static int qu_init();
+static void qu_push(int s);
+void *thread_send_socket(void *arg);
+static void close_queue_sock();
+static int qu_not_full();
+static void set_arr_conn(int n, const unsigned char *s);
+//======================================================================
+static void sig_handler(int sig)
 {
     if (sig == SIGINT)
     {
         fprintf(stderr, "<main> ######  SIGINT  ######\n");
-        get_sig = CLOSE_SIG;
+        received_sig = CLOSE_SIG_;
     }
     else if (sig == SIGSEGV)
     {
@@ -41,7 +48,7 @@ static void signal_handler(int sig)
 //======================================================================
 int send_sig(const char *sig)
 {
-    for (int i = 0; i < conf->NumProc; ++i)
+    for (int i = 0; i < conf->NUM_PROC; ++i)
     {
         int ret = send_fd(unixFD[i], -1, &i, sizeof(i));
         if (ret < 0)
@@ -162,7 +169,7 @@ int main(int argc, char *argv[])
             if (read_conf_file(conf_dir))
                 exit(1);
             
-            snprintf(pidFile, sizeof(pidFile), "%s/pid.txt", conf->pidDir);
+            snprintf(pidFile, sizeof(pidFile), "%s/pid.txt", conf->PIDDIR);
             FILE *fpid = fopen(pidFile, "r");
             if (!fpid)
             {
@@ -170,15 +177,14 @@ int main(int argc, char *argv[])
                 exit(1);
             }
 
-            fprintf(fpid, "%u\n", getpid());
             fscanf(fpid, "%u", &pid_);
             fclose(fpid);
 
             int data;
             if (!strcmp(sig, "restart"))
-                data = RESTART_SIG;
+                data = RESTART_SIG_;
             else if (!strcmp(sig, "close"))
-                data = CLOSE_SIG;
+                data = CLOSE_SIG_;
             else
             {
                 fprintf(stderr, "<%d> ? option -s: %s\n", __LINE__, sig);
@@ -208,7 +214,7 @@ int main(int argc, char *argv[])
         if (read_conf_file(conf_dir))
             return -1;
 
-        snprintf(pidFile, sizeof(pidFile), "%s/pid.txt", conf->pidDir);
+        snprintf(pidFile, sizeof(pidFile), "%s/pid.txt", conf->PIDDIR);
         FILE *fpid = fopen(pidFile, "w");
         if (!fpid)
         {
@@ -224,7 +230,7 @@ int main(int argc, char *argv[])
             sockServer = create_server_socket(conf);
             if (sockServer == -1)
             {
-                fprintf(stderr, "<%s:%d> Error: create_server_socket(%s:%s)\n", __func__, __LINE__, conf->host, conf->servPort);
+                fprintf(stderr, "<%s:%d> Error: create_server_socket(%s:%s)\n", __func__, __LINE__, conf->SERVER_ADDR, conf->SERVER_PORT);
                 exit(1);
             }
 
@@ -250,47 +256,56 @@ int main_proc()
 {
     char s[256];
 
-    create_logfiles(conf->logDir, conf->ServerSoftware);
+    create_logfiles(conf->LOGDIR, conf->SERVER_SOFTWARE);
     //------------------------------------------------------------------
     pid_t pid = getpid();
 
     get_time(s, 64);
     printf(     " [%s] - server \"%s\" run\n"
                 "   ip = %s\n"
-                "   port = %s\n"
+                "   port = %s\n\n"
+
+                "   ListenBacklog = %d\n"
                 "   tcp_cork = %c\n"
                 "   TcpNoDelay = %c\n\n"
+
                 "   SendFile = %c\n"
-                "   SendFileSizePart = %ld\n"
-                "   SndBufSize = %d\n"
-                "   MaxEventSock = %d\n"
-                "   TimeoutPoll = %d\n\n"
+                "   SndBufSize = %d\n\n"
+
+                "   SizeQueueConnect = %d\n"
+                "   MaxWorkConnect = %d\n"
+                "   MaxEventConnect = %d\n\n"
+
                 "   NumChld = %d\n"
                 "   MaxThreads = %d\n"
-                "   MimThreads = %d\n\n"
-                "   MaxProcCgi = %d\n"
-                "   ListenBacklog = %d\n"
-                "   MaxRequests = %d\n\n" 
+                "   MimThreads = %d\n"
+                "   MaxProcCgi = %d\n\n"
+
                 "   KeepAlive %c\n"
                 "   TimeoutKeepAlive = %d\n"
                 "   TimeOut = %d\n"
-                "   TimeOutCGI = %d\n\n"
+                "   TimeOutCGI = %d\n"
+                "   TimeoutPoll = %d\n\n"
+
                 "   MaxRanges = %d\n\n"
+
                 "   php: %s\n"
-                "   path_php: %s\n"
+                "   path_php: %s\n\n"
+
                 "   ShowMediaFiles = %c\n"
                 "   ClientMaxBodySize = %ld\n\n"
+
                 "   index.html = %c\n"
                 "   index.php = %c\n"
                 "   index.pl = %c\n"
                 "   index.fcgi = %c\n",
-                s, conf->ServerSoftware, conf->host, conf->servPort, conf->tcp_cork, conf->TcpNoDelay,
-                conf->SEND_FILE, conf->SEND_FILE_SIZE_PART, conf->SNDBUF_SIZE, conf->MAX_EVENT_SOCK,
-                conf->TIMEOUT_POLL, conf->NumProc, conf->MaxThreads, conf->MinThreads, conf->MaxProcCgi,
-                conf->ListenBacklog, conf->MAX_REQUESTS, conf->KeepAlive, conf->TimeoutKeepAlive, conf->TimeOut,
-                conf->TimeoutCGI, conf->MaxRanges, conf->UsePHP, conf->PathPHP, conf->ShowMediaFiles,
-                conf->ClientMaxBodySize, conf->index_html, conf->index_php, conf->index_pl, conf->index_fcgi);
-    printf("   %s;\n   %s\n\n", conf->rootDir, conf->cgiDir);
+                s, conf->SERVER_SOFTWARE, conf->SERVER_ADDR, conf->SERVER_PORT, conf->LISTEN_BACKLOG, conf->tcp_cork, 
+                conf->tcp_nodelay, conf->SEND_FILE, conf->SNDBUF_SIZE, conf->SIZE_QUEUE_CONNECT, conf->MAX_WORK_CONNECT,  
+                conf->MAX_EVENT_CONNECT, conf->NUM_PROC, conf->MAX_THREADS, conf->MIN_THREADS, conf->MAX_PROC_CGI,  
+                conf->KEEP_ALIVE, conf->TIMEOUT_KEEP_ALIVE, conf->TIMEOUT, conf->TIMEOUT_CGI, conf->TIMEOUT_POLL, 
+                conf->MAX_RANGES, conf->UsePHP, conf->PathPHP, conf->SHOW_MEDIA_FILES, conf->CLIENT_MAX_BODY_SIZE, 
+                conf->index_html, conf->index_php, conf->index_pl, conf->index_fcgi);
+    printf("   %s;\n   %s\n\n", conf->ROOTDIR, conf->CGIDIR);
 
     fcgi_list_addr *i = conf->fcgi_list;
     for (; i; i = i->next)
@@ -308,25 +323,38 @@ int main_proc()
         }
     }
 
-    create_proc(conf->NumProc);
+    create_proc(conf->NUM_PROC);
     fprintf(stdout, "   pid=%u, uid=%u, gid=%u\n", pid, getuid(), getgid());
     fprintf(stderr, "   pid=%u, uid=%u, gid=%u\n", pid, getuid(), getgid());
 
-    if (signal(SIGSEGV, signal_handler) == SIG_ERR)
+    if (signal(SIGSEGV, sig_handler) == SIG_ERR)
     {
         fprintf (stderr, "   Error signal(SIGSEGV): %s\n", strerror(errno));
         exit (EXIT_FAILURE);
     }
 
-    if (signal(SIGINT, signal_handler) == SIG_ERR)
+    if (signal(SIGINT, sig_handler) == SIG_ERR)
     {
         fprintf (stderr, "   Error signal(SIGINT): %s\n", strerror(errno));
         exit (EXIT_FAILURE);
     }
     //------------------------------------------------------------------
-    for (int i = 0; i < conf->NumProc; ++i)
+    for (int i = 0; i < conf->NUM_PROC; ++i)
         numConn[i] = 0;
-
+    //--------------------------------------------------------------
+    if (qu_init())
+    {
+        return -1;
+    }
+    
+    pthread_t thr_send_sock;
+    int n = pthread_create(&thr_send_sock, NULL, thread_send_socket, NULL);
+    if (n)
+    {
+        print_err("<%s:%d> Error pthread_create(send_fd_sock): %s\n", __func__, __LINE__, strerror(n));
+        exit(1);
+    }
+    //------------------------------------------------------------------
     static struct pollfd fdrd[3];
 
     fdrd[0].fd = from_chld[0];
@@ -338,73 +366,29 @@ int main_proc()
     fdrd[2].fd = sockServer;
     fdrd[2].events = POLLIN;
 
-    int num_fdrd, i_fd;
-    struct
-    {
-        int sock;
-        int num;
-    } err_send_fd;
-
-    err_send_fd.sock = 0;
-
-    struct sockaddr_storage clientAddr;
-    socklen_t addrSize = sizeof(struct sockaddr_storage);
+    int num_fdrd = 3;
 
     while (run)
     {
-        if (err_send_fd.sock > 0)
-        {
-            int ret = send_fd(unixFD[err_send_fd.num], err_send_fd.sock, &clientAddr, addrSize);
-            if (ret == -1)
-            {
-                run = 0;
-                break;
-            }
-            else if (ret == -ENOBUFS)
-            {
-                num_fdrd = 2;
-                print_err("<%s:%d> Error send_fd(): ENOBUFS\n", __func__, __LINE__);
-            }
-            else
-            {
-                close(err_send_fd.sock);
-                err_send_fd.sock = 0;
-                numConn[err_send_fd.num]++;
-            }
-        }
-
-        if (get_sig)
+        if (received_sig)
         {
             if (all_conn == 0)
             {
-                if (get_sig == RESTART_SIG)
+                if (received_sig == RESTART_SIG_)
                     run = 1;
-                else if (get_sig == CLOSE_SIG)
+                else if (received_sig == CLOSE_SIG_)
                     run = 0;
                 else
                 {
-                    fprintf(stderr, "<%s:%d> Error: get_sig=%d\n", __func__, __LINE__, get_sig);
+                    fprintf(stderr, "<%s:%d> Error: received_sig=%d\n", __func__, __LINE__, received_sig);
                     run = 1;
                 }
 
-                get_sig = 0;
+                received_sig = 0;
                 break;
             }
             else
                 num_fdrd = 1;
-        }
-        else if (err_send_fd.sock == 0)
-        {
-            for (i_fd = 0; i_fd < conf->NumProc; ++i_fd)
-            {
-                if (numConn[i_fd] < conf->MAX_REQUESTS)
-                    break;
-            }
-
-            if (i_fd >= conf->NumProc)
-                num_fdrd = 2;
-            else
-                num_fdrd = 3;
         }
 
         int ret_poll = poll(fdrd, num_fdrd, -1);
@@ -425,17 +409,14 @@ int main_proc()
                 break;
             }
 
-            for ( int i = 0; i < ret; i++)
-            {
-                numConn[s[i]]--;
-                all_conn--;
-            }
+            set_arr_conn(ret, s);
+            all_conn  -= ret;
             ret_poll--;
         }
 
         if (ret_poll && (fdrd[1].revents == POLLIN))
         {
-            int ret = read(sock_sig, &get_sig, sizeof(get_sig));
+            int ret = read(sock_sig, &received_sig, sizeof(received_sig));
             if (ret <= 0)
             {
                 print_err("<%s:%d> Error read()=%d: %s\n", __func__, __LINE__, ret, strerror(errno));
@@ -447,34 +428,17 @@ int main_proc()
 
         if (ret_poll && (fdrd[2].revents == POLLIN))
         {
-            addrSize = sizeof(struct sockaddr_storage);
-            int clientSock = accept(sockServer, (struct sockaddr *)&clientAddr, &addrSize);
-            if (clientSock == -1)
+            if (qu_not_full())
             {
-                print_err("<%s:%d> Error accept()=-1: %s\n", __func__, __LINE__, strerror(errno));
-                run = 0;
-                break;
-            }
-            all_conn++;
-
-            int ret = send_fd(unixFD[i_fd], clientSock, &clientAddr, addrSize);
-            //int ret = seng_fd_timeout(unixFD[i_fd], clientSock, &clientAddr, addrSize, 5);
-            if (ret == -1)
-            {
-                run = 0;
-                break;
-            }
-            else if (ret == -ENOBUFS)
-            {
-                err_send_fd.sock = clientSock;
-                err_send_fd.num = i_fd;
-                print_err("<%s:%d> Error send_fd: ENOBUFS\n", __func__, __LINE__);
-                continue;
-            }
-            else
-            {
-                close(clientSock);
-                numConn[i_fd]++;
+                int clientSock = accept(sockServer, NULL, NULL);
+                if (clientSock == -1)
+                {
+                    print_err("<%s:%d> Error accept()=-1: %s\n", __func__, __LINE__, strerror(errno));
+                    run = 0;
+                    break;
+                }
+                all_conn++;
+                qu_push(clientSock);
             }
             ret_poll--;
         }
@@ -488,7 +452,7 @@ int main_proc()
         }
     }
 
-    for (int i = 0; i < conf->NumProc; ++i)
+    for (int i = 0; i < conf->NUM_PROC; ++i)
     {
         char ch = i;
         int ret = send_fd(unixFD[i], -1, &ch, 1);
@@ -513,6 +477,9 @@ int main_proc()
     }
     
     close(from_chld[0]);
+    
+    close_queue_sock();
+    pthread_join(thr_send_sock, NULL);
 
     while ((pid = wait(NULL)) != -1)
     {
@@ -590,4 +557,141 @@ int seng_fd_timeout(int unix_sock, int fd, struct sockaddr_storage *addr, sockle
     }
 
     return send_fd(unix_sock, fd, addr, size);
+}
+//======================================================================
+static int *buf_queue_sock = NULL;   // buffer queue sockets
+static int size_qu, i_push, i_pop, thr_queue_close;
+
+static pthread_mutex_t mtx_sock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t cond_push_sock = PTHREAD_COND_INITIALIZER;
+static pthread_cond_t cond_close_conn = PTHREAD_COND_INITIALIZER;
+//----------------------------------------------------------------------
+static void close_queue_sock()
+{
+    thr_queue_close = 1;
+    pthread_cond_signal(&cond_push_sock);
+}
+//----------------------------------------------------------------------
+static int qu_init()
+{
+    size_qu = i_push = i_pop = thr_queue_close = 0;
+
+    buf_queue_sock = malloc(conf->SIZE_QUEUE_CONNECT * sizeof(int));
+    if (!buf_queue_sock)
+    {
+        fprintf(stderr, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+        return -1;
+    }
+
+    return 0;
+}
+//----------------------------------------------------------------------
+int qu_not_full()
+{
+pthread_mutex_lock(&mtx_sock);
+    int ret = conf->SIZE_QUEUE_CONNECT - size_qu;
+pthread_mutex_unlock(&mtx_sock);
+    return ret;
+}
+//----------------------------------------------------------------------
+static void qu_push(int s)
+{
+pthread_mutex_lock(&mtx_sock);
+    buf_queue_sock[i_push++] = s;
+    if (i_push >= conf->SIZE_QUEUE_CONNECT)
+        i_push = 0;
+    size_qu++;
+pthread_mutex_unlock(&mtx_sock);
+    pthread_cond_signal(&cond_push_sock);
+}
+//----------------------------------------------------------------------
+static void set_arr_conn(int n, const unsigned char *s)
+{
+pthread_mutex_lock(&mtx_sock);
+    for ( int i = 0; i < n; i++)
+    {
+        numConn[s[i]]--;
+    }
+pthread_mutex_unlock(&mtx_sock);
+    pthread_cond_signal(&cond_close_conn);
+}
+//----------------------------------------------------------------------
+void timedwait_close_connect()
+{
+pthread_mutex_lock(&mtx_sock);
+    struct timeval now;
+    struct timespec ts;
+    
+    gettimeofday(&now, NULL);
+    ts.tv_sec = now.tv_sec;
+    ts.tv_nsec = (now.tv_usec + 1000) * 1000;
+    
+    pthread_cond_timedwait(&cond_close_conn, &mtx_sock, &ts);
+    
+pthread_mutex_unlock(&mtx_sock);
+}
+//----------------------------------------------------------------------
+void *thread_send_socket(void *arg)
+{
+    int sock, i;
+    char data[1] = "";
+
+    while (1)
+    {
+    pthread_mutex_lock(&mtx_sock);
+        while (size_qu == 0)
+        {
+            pthread_cond_wait(&cond_push_sock, &mtx_sock);
+            if (thr_queue_close)
+                break;
+        }
+        sock = buf_queue_sock[i_pop];
+        
+        for ( i = 0; thr_queue_close == 0; )
+        {
+            if (numConn[i] < conf->MAX_WORK_CONNECT)
+                break;
+            ++i;
+            if (i >= conf->NUM_PROC)
+            {
+                pthread_cond_wait(&cond_close_conn, &mtx_sock);
+                if (thr_queue_close)
+                    break;
+                i = 0;
+            }
+        }
+    pthread_mutex_unlock(&mtx_sock);
+ 
+        if (thr_queue_close)
+        {
+            free(buf_queue_sock);
+            buf_queue_sock = NULL;
+            return NULL;
+        }
+        //--------------------------------------------------------------
+        int ret = send_fd(unixFD[i], sock, data, sizeof(data));
+        if (ret == -ENOBUFS)
+        {
+            //print_err("<%s:%d> Error send_fd(%d), ENOBUFS\n", __func__, __LINE__, sock);
+            timedwait_close_connect();
+            continue;
+        }
+        else if (ret < 0)
+        {
+            print_err("<%s:%d> Error send_fd(%d), i=%d\n", __func__, __LINE__, sock, i_pop);
+            exit(1);
+        }
+
+        close(sock);
+        
+    pthread_mutex_lock(&mtx_sock);
+        numConn[i]++;
+        size_qu--;
+    pthread_mutex_unlock(&mtx_sock);
+        //--------------------------------------------------------------
+        i_pop++;
+        if (i_pop >= conf->SIZE_QUEUE_CONNECT)
+            i_pop = 0;
+    }
+    return NULL;
 }

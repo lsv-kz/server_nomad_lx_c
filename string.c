@@ -34,23 +34,20 @@ void str_free(String *s)
     s->size = s->len = s->err = 0;
 }
 //======================================================================
-static void reserve(String *s, unsigned int n)
+void str_reserve(String *s, unsigned int n)
 {
     if (!s) return;
     if ((n <= s->size) || s->err)
-    {
-        if (n < s->size) s->err = 1;
         return;
-    }
-    
-    char *new_ptr = malloc(n);
+
+    char *new_ptr = malloc(++n);
     if (!new_ptr)
     {
         s->err = 1;
         return;
     }
-    
-    if (s->len)
+
+    if (s->len && s->ptr)
     {
         memcpy(new_ptr, s->ptr, s->len);
         free(s->ptr);
@@ -78,6 +75,25 @@ void str_resize(String *s, unsigned int n)
     s->len = n;
 }
 //======================================================================
+void str_cpy(String *s, const char *cs)
+{
+    if (!s || !cs) return;
+    if (s->err) return;
+
+    s->len = strlen(cs);
+    if (s->len == 0)
+        return;
+
+    if (s->size <= s->len)
+    {
+        str_reserve(s, s->len + 1);
+        if (s->err)
+            return;
+    }
+
+    memcpy(s->ptr, cs, s->len);
+}
+//======================================================================
 void str_cat(String *s, const char *cs)
 {
     if (!s || !cs) return;
@@ -88,7 +104,7 @@ void str_cat(String *s, const char *cs)
         return;
     if (s->size <= (s->len + len))
     {
-        reserve(s, s->len + len + 1);
+        str_reserve(s, s->len + len + 1);
         if (s->err)
             return;
     }
@@ -111,7 +127,7 @@ void str_cat_ln(String *s, const char *cs)
         return;
     if (s->size <= (s->len + len + 2))
     {
-        reserve(s, s->len + len + 2 + 1);
+        str_reserve(s, s->len + len + 2 + 1);
         if (s->err)
             return;
     }
@@ -128,7 +144,7 @@ void str_n_cat(String *s, const char *cs, unsigned int len)
     if (s->err || !len) return;
     if (s->size <= (s->len + len))
     {
-        reserve(s, s->len + len + 1);
+        str_reserve(s, s->len + len + 1);
         if (s->err)
             return;
     }

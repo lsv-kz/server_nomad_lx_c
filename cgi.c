@@ -13,13 +13,13 @@ int timedwait_close_cgi(void)
 {
     int ret = 0;
 pthread_mutex_lock(&mtx_chld);
-    while (num_chlds >= conf->MaxProcCgi)
+    while (num_chlds >= conf->MAX_PROC_CGI)
     {
         struct timeval now;
         struct timespec ts;
     
         gettimeofday(&now, NULL);
-        ts.tv_sec = now.tv_sec + conf->TimeoutCGI;
+        ts.tv_sec = now.tv_sec + conf->TIMEOUT_CGI;
         ts.tv_nsec = now.tv_usec * 1000;
     
         ret = pthread_cond_timedwait(&cond_close_cgi, &mtx_chld, &ts);
@@ -130,7 +130,7 @@ int cgi_chunk(Connect *req, String *hdrs, int cgi_serv_in, char *start_ptr, int 
 
     if (req->reqMethod == M_HEAD)
     {
-        int n = cgi_to_cosmos(cgi_serv_in, conf->TimeoutCGI);
+        int n = cgi_to_cosmos(cgi_serv_in, conf->TIMEOUT_CGI);
         if (n < 0)
         {
             print__err(req, "<%s:%d> Error send_header_response()\n", __func__, __LINE__);
@@ -192,7 +192,7 @@ int cgi_read_headers(Connect *req, String *hdrs, int cgi_serv_in)
     char buf[size];
 
     req->respStatus = RS200;
-    ReadFromScript = read_timeout(cgi_serv_in, buf, size, conf->TimeoutCGI);
+    ReadFromScript = read_timeout(cgi_serv_in, buf, size, conf->TIMEOUT_CGI);
     if(ReadFromScript <= 0)
     {
         print__err(req, "<%s:%d> ReadFromScript=%d\n", __func__, __LINE__, ReadFromScript);
@@ -273,35 +273,38 @@ int cgi_fork(Connect *req)
     int serv_cgi[2], cgi_serv[2];
     int wr_bytes, n;
     struct stat st;
-    
+
     switch(req->scriptType)
     {
         case cgi_ex:
-            str_resize(req->path, 0);
-            str_cat(req->path, conf->cgiDir);
-            str_cat(req->path, cgi_script_file(req->scriptName));
+            str_cpy(&req->path, conf->CGIDIR);
+            str_cat(&req->path, cgi_script_file(str_ptr(&req->scriptName)));
+            break;
         case php_cgi:
-            if (str_ptr(req->path)[str_len(req->path)] == '/')
-                str_resize(req->path, str_len(req->path) - 1);
-            
-            if(stat(str_ptr(req->path), &st) == -1)
-            {
-                print__err(req, "<%s:%d> script (%s) not found\n", __func__, __LINE__, str_ptr(req->path));
-                return -RS404;
-            }
+            str_cpy(&req->path, conf->ROOTDIR);
+            str_cat(&req->path, req->decodeUri);
             break;
         default:
             print__err(req, "<%s:%d> ScriptType \?(404)\n", __func__, __LINE__);
             return -1;
     }
-    
+
+    if (str_ptr(&req->path)[str_len(&req->path)] == '/')
+        str_resize(&req->path, str_len(&req->path) - 1);
+
+    if(stat(str_ptr(&req->path), &st) == -1)
+    {
+        print__err(req, "<%s:%d> script (%s) not found\n", __func__, __LINE__, str_ptr(&req->path));
+        return -RS404;
+    }
+
     n = pipe(serv_cgi);
     if (n < 0)
     {
         print__err(req, "<%s:%d> Error try_open_pipe()=%d; %d\n", __func__, __LINE__, n, req->clientSocket);
         return -1;
     }
-            
+
     n = pipe(cgi_serv);
     if (n < 0)
     {
@@ -348,9 +351,9 @@ int cgi_fork(Connect *req)
         if(req->scriptType == php_cgi)
             setenv("REDIRECT_STATUS", "true", 1);
         setenv("PATH", "/bin:/usr/bin:/usr/local/bin", 1);
-        setenv("SERVER_SOFTWARE", conf->ServerSoftware, 1);
+        setenv("SERVER_SOFTWARE", conf->SERVER_SOFTWARE, 1);
         setenv("GATEWAY_INTERFACE", "CGI/1.1", 1);
-        setenv("DOCUMENT_ROOT", conf->rootDir, 1);
+        setenv("DOCUMENT_ROOT", conf->ROOTDIR, 1);
         setenv("REMOTE_ADDR", req->remoteAddr, 1);
         setenv("REQUEST_URI", req->uri, 1);
         setenv("REQUEST_METHOD", get_str_method(req->reqMethod), 1);
@@ -361,8 +364,8 @@ int cgi_fork(Connect *req)
             setenv("HTTP_REFERER", req->reqHeadersValue[req->req_hd.iReferer], 1);
         if(req->req_hd.iUserAgent >= 0)
             setenv("HTTP_USER_AGENT", req->reqHeadersValue[req->req_hd.iUserAgent], 1);
-        setenv("SCRIPT_NAME", req->scriptName, 1);
-        setenv("SCRIPT_FILENAME", str_ptr(req->path), 1);
+        setenv("SCRIPT_NAME", str_ptr(&req->scriptName), 1);
+        setenv("SCRIPT_FILENAME", str_ptr(&req->path), 1);
         if(req->reqMethod == M_POST)
         {
             if(req->req_hd.iReqContentType >= 0)
@@ -375,7 +378,7 @@ int cgi_fork(Connect *req)
 
         if(req->scriptType == cgi_ex)
         {
-            execl(str_ptr(req->path), base_name(req->scriptName), NULL);
+            execl(str_ptr(&req->path), base_name(str_ptr(&req->scriptName)), NULL);
         }
         else if(req->scriptType == php_cgi)
         {
@@ -395,7 +398,7 @@ int cgi_fork(Connect *req)
                 " </head>\n"
                 " <body>\n"
                 "  <h3> 500 Internal Server Error</h3>\n"
-                "  <p>.no exec: %s(%d)</p>\n"
+                "  <p>%s(%d)</p>\n"
                 "  <hr>\n"
                 "  %s\n"
                 " </body>\n"
@@ -413,7 +416,7 @@ int cgi_fork(Connect *req)
         {
             if (req->tail)
             {
-                wr_bytes = write_timeout(serv_cgi[1], req->tail, req->lenTail, conf->TimeoutCGI);
+                wr_bytes = write_timeout(serv_cgi[1], req->tail, req->lenTail, conf->TIMEOUT_CGI);
                 if (wr_bytes < 0)
                 {
                     print__err(req, "<%s:%d> Error tail to script: %d\n", __func__, __LINE__, wr_bytes);
@@ -427,7 +430,7 @@ int cgi_fork(Connect *req)
             wr_bytes = client_to_script(req->clientSocket, serv_cgi[1], &req->req_hd.reqContentLength, req->numReq);
             if(wr_bytes < 0)
             {
-                if (req->req_hd.reqContentLength > 0 && req->req_hd.reqContentLength < conf->ClientMaxBodySize)
+                if (req->req_hd.reqContentLength > 0 && req->req_hd.reqContentLength < conf->CLIENT_MAX_BODY_SIZE)
                     client_to_cosmos(req->clientSocket, (long)req->req_hd.reqContentLength);
 
                 print__err(req, "<%s:%d> Error client_to_script() = %d\n", __func__, __LINE__, wr_bytes);
@@ -480,18 +483,25 @@ int cgi(Connect *req)
             return -RS411;
         }
 
-        if (req->req_hd.reqContentLength > conf->ClientMaxBodySize)
+        if (req->req_hd.reqContentLength > conf->CLIENT_MAX_BODY_SIZE)
         {
             print__err(req, "<%s:%d> 413 Request entity too large: %lld\n", __func__, __LINE__, req->req_hd.reqContentLength);
             return -RS413;
         }
     }
-    
+
     if (timedwait_close_cgi())
     {
         return -1;
     }
     //------------------------------------------------------------------
+    str_cpy(&req->scriptName, req->decodeUri);
+    if (req->scriptName.err)
+    {
+        print__err(req, "<%s:%d> Error: malloc()\n", __func__, __LINE__);
+        return -RS500;
+    }
+
     ret = cgi_fork(req);
     cgi_dec();
     if (ret < 0)

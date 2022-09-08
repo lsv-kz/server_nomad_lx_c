@@ -23,7 +23,7 @@ void create_logfiles(const char *log_dir, const char * ServerSoftware)
     }
 
     snprintf(s, sizeof(s), "%s/%s-%s", log_dir, ServerSoftware, "error.log");
-    flog_err = open(s, O_CREAT | O_APPEND | O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);//  O_TRUNC
+    flog_err = open(s, O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);// O_APPEND 
     if(flog_err == -1)
     {
         fprintf(stderr,"Error create log_err: %s\n", s);
@@ -46,8 +46,9 @@ void print_err(const char *format, ...)
 
     buf[0] = '[';
     get_time(buf + 1, sizeof(buf) - 1);
-    strcat(buf, "] - ");
     int len = strlen(buf);
+    memcpy(buf + len, "] - ", 5);
+    len = strlen(buf);
     va_start(ap, format);
     vsnprintf(buf + len, sizeof(buf) - len, format, ap);
     va_end(ap);
@@ -64,8 +65,9 @@ void print__err(Connect *req, const char *format, ...)
     char buf[256];
     buf[0] = '[';
     get_time(buf + 1, sizeof(buf) - 1);
-    strcat(buf, "] - ");
     int len = strlen(buf);
+    memcpy(buf + len, "] - ", 5);
+    len = strlen(buf);
     snprintf(buf + len, sizeof(buf) - len, "[%u/%u/%u] ", req->numProc, req->numConn, req->numReq);
     len = strlen(buf);
     va_start(ap, format);
