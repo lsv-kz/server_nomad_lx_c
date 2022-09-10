@@ -115,7 +115,7 @@ pthread_mutex_unlock(&mtx_thr);
 int wait_create_thr(int *n)
 {
 pthread_mutex_lock(&mtx_thr);
-    while (((size_list <= num_wait_thr) || (count_thr >= conf->MAX_THREADS)) && !stop_manager)
+    while (((size_list <= num_wait_thr) || (count_thr >= conf->MaxThreads)) && !stop_manager)
     {
         pthread_cond_wait(&cond_new_thr, &mtx_thr);
     }
@@ -128,7 +128,7 @@ pthread_mutex_unlock(&mtx_thr);
 int end_thr(int ret)
 {
 pthread_mutex_lock(&mtx_thr);
-    if (((count_thr > conf->MIN_THREADS) && (size_list < num_wait_thr)) || ret)
+    if (((count_thr > conf->MinThreads) && (size_list < num_wait_thr)) || ret)
     {
         --count_thr;
         ret = EXIT_THR;
@@ -194,7 +194,7 @@ void end_response(Connect *req)
         }
     #endif
         print_log(req);
-        req->timeout = conf->TIMEOUT_KEEP_ALIVE;
+        req->timeout = conf->TimeoutKeepAlive;
         ++req->numReq;
         push_pollin_list(req);
     }
@@ -318,23 +318,30 @@ int manager(int sockServer, int numProc, int to_parent)
     if (get_lim_max_fd(&max_fd, &cur_fd) == -1)
         return -1;
     int min_open_fd = 9;
-    int m = min_open_fd + (conf->MAX_WORK_CONNECT * 2);
+    int m = min_open_fd + (conf->MaxWorkConnect * 2);
     if (m > cur_fd)
     {
         n = set_max_fd(m);
         if (n < 0)
             return -1;
+        if (conf->MaxWorkConnect != (n - min_open_fd)/2)
+        {
+            print_err("<%s:%d> Error set MAX_WORK_CONNECT\n", __func__, __LINE__);
+            shutdown(servSock, SHUT_RDWR);
+            close(servSock);
+            return -1;
+        }
         set_max_conn((n - min_open_fd)/2);
     }
-    printf("<%s:%d> MAX_WORK_CONNECT=%d\n", __func__, __LINE__, conf->MAX_WORK_CONNECT);
+    //printf("<%s:%d> MaxWorkConnect=%d\n", __func__, __LINE__, conf->MaxWorkConnect);
     //------------------------------------------------------------------
-    if (chdir(conf->ROOTDIR))
+    if (chdir(conf->DocumentRoot))
     {
-        print_err("[%d] <%s:%d> Error chdir(%s): %s\n", numProc, __func__, __LINE__, conf->ROOTDIR, strerror(errno));
+        print_err("[%d] <%s:%d> Error chdir(%s): %s\n", numProc, __func__, __LINE__, conf->DocumentRoot, strerror(errno));
         exit(1);
     }
     //------------------------------------------------------------------
-    for (i = 0; i < conf->MIN_THREADS; ++i)
+    for (i = 0; i < conf->MinThreads; ++i)
     {
         n = create_thread(&numProc);
         if (n)
@@ -345,7 +352,7 @@ int manager(int sockServer, int numProc, int to_parent)
         num_thr = start_thr();
     }
 
-    if (get_num_thr() > conf->MIN_THREADS)
+    if (get_num_thr() > conf->MinThreads)
     {
         print_err("[%d:%s:%d] Error num threads=%d\n", numProc, __func__, __LINE__, get_num_thr());
         exit(1);
@@ -404,7 +411,7 @@ int manager(int sockServer, int numProc, int to_parent)
         req->numReq = 0;
         req->serverSocket = sockServer;
         req->clientSocket = clientSocket;
-        req->timeout = conf->TIMEOUT;
+        req->timeout = conf->TimeOut;
         req->remoteAddr[0] = '\0';
         getpeername(clientSocket,(struct sockaddr *)&clientAddr, &addrSize);
         n = getnameinfo((struct sockaddr *)&clientAddr, 

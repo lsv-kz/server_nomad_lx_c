@@ -153,7 +153,7 @@ int get_ranges(Connect *req)
         return -RS500;
     }
     
-    if (conf->MAX_RANGES == 0)
+    if (conf->MaxRanges == 0)
     {
         return -RS403;
     }
@@ -165,8 +165,8 @@ int get_ranges(Connect *req)
     }
     
     SizeArray++;
-    if (SizeArray > conf->MAX_RANGES)
-        SizeArray = conf->MAX_RANGES;
+    if (SizeArray > conf->MaxRanges)
+        SizeArray = conf->MaxRanges;
     req->rangeBytes = malloc(sizeof(Range) * SizeArray);
     if (!req->rangeBytes)
     {

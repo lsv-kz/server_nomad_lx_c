@@ -184,7 +184,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
 
         long long size = (long long)st.st_size;
 
-        if (isimage(list[i]) && (conf->SHOW_MEDIA_FILES == 'y'))
+        if (isimage(list[i]) && (conf->ShowMediaFiles == 'y'))
         {
             if (size < 8000LL)
             {
@@ -213,7 +213,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
                 }
             }
         }
-        else if (isaudiofile(list[i]) && (conf->SHOW_MEDIA_FILES == 'y'))
+        else if (isaudiofile(list[i]) && (conf->ShowMediaFiles == 'y'))
         {
             va_chunk_add_str(&chk, 7, "   <tr><td><audio preload=\"none\" controls src=\"", buf, 
                                 "\"></audio><a href=\"", buf, "\">", list[i], "</a></td><td align=\"right\">");

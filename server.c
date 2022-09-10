@@ -23,8 +23,8 @@ enum { RESTART_SIG_ = 1, CLOSE_SIG_,};
 //======================================================================
 static int qu_init();
 static void qu_push(int s);
-void *thread_send_socket(void *arg);
-static void close_queue_sock();
+static void *thread_send_socket(void *arg);
+static void thread_queue_close();
 static int qu_not_full();
 static void set_arr_conn(int n, const unsigned char *s);
 //======================================================================
@@ -48,7 +48,7 @@ static void sig_handler(int sig)
 //======================================================================
 int send_sig(const char *sig)
 {
-    for (int i = 0; i < conf->NUM_PROC; ++i)
+    for (int i = 0; i < conf->NumProc; ++i)
     {
         int ret = send_fd(unixFD[i], -1, &i, sizeof(i));
         if (ret < 0)
@@ -169,7 +169,7 @@ int main(int argc, char *argv[])
             if (read_conf_file(conf_dir))
                 exit(1);
             
-            snprintf(pidFile, sizeof(pidFile), "%s/pid.txt", conf->PIDDIR);
+            snprintf(pidFile, sizeof(pidFile), "%s/pid.txt", conf->PidFilePath);
             FILE *fpid = fopen(pidFile, "r");
             if (!fpid)
             {
@@ -214,7 +214,7 @@ int main(int argc, char *argv[])
         if (read_conf_file(conf_dir))
             return -1;
 
-        snprintf(pidFile, sizeof(pidFile), "%s/pid.txt", conf->PIDDIR);
+        snprintf(pidFile, sizeof(pidFile), "%s/pid.txt", conf->PidFilePath);
         FILE *fpid = fopen(pidFile, "w");
         if (!fpid)
         {
@@ -230,7 +230,7 @@ int main(int argc, char *argv[])
             sockServer = create_server_socket(conf);
             if (sockServer == -1)
             {
-                fprintf(stderr, "<%s:%d> Error: create_server_socket(%s:%s)\n", __func__, __LINE__, conf->SERVER_ADDR, conf->SERVER_PORT);
+                fprintf(stderr, "<%s:%d> Error: create_server_socket(%s:%s)\n", __func__, __LINE__, conf->ServerAddr, conf->ServerPort);
                 exit(1);
             }
 
@@ -256,7 +256,7 @@ int main_proc()
 {
     char s[256];
 
-    create_logfiles(conf->LOGDIR, conf->SERVER_SOFTWARE);
+    create_logfiles(conf->LogPath, conf->ServerSoftware);
     //------------------------------------------------------------------
     pid_t pid = getpid();
 
@@ -299,16 +299,16 @@ int main_proc()
                 "   index.php = %c\n"
                 "   index.pl = %c\n"
                 "   index.fcgi = %c\n",
-                s, conf->SERVER_SOFTWARE, conf->SERVER_ADDR, conf->SERVER_PORT, conf->LISTEN_BACKLOG, conf->tcp_cork, 
-                conf->tcp_nodelay, conf->SEND_FILE, conf->SNDBUF_SIZE, conf->SIZE_QUEUE_CONNECT, conf->MAX_WORK_CONNECT,  
-                conf->MAX_EVENT_CONNECT, conf->NUM_PROC, conf->MAX_THREADS, conf->MIN_THREADS, conf->MAX_PROC_CGI,  
-                conf->KEEP_ALIVE, conf->TIMEOUT_KEEP_ALIVE, conf->TIMEOUT, conf->TIMEOUT_CGI, conf->TIMEOUT_POLL, 
-                conf->MAX_RANGES, conf->UsePHP, conf->PathPHP, conf->SHOW_MEDIA_FILES, conf->CLIENT_MAX_BODY_SIZE, 
+                s, conf->ServerSoftware, conf->ServerAddr, conf->ServerPort, conf->ListenBacklog, conf->tcp_cork, 
+                conf->tcp_nodelay, conf->SendFile, conf->SndBufSize, conf->SizeQueueConnect, conf->MaxWorkConnect,  
+                conf->MaxEventConnect, conf->NumProc, conf->MaxThreads, conf->MinThreads, conf->MaxProcCgi,  
+                conf->KeepAlive, conf->TimeoutKeepAlive, conf->TimeOut, conf->TimeoutCGI, conf->TimeoutPoll, 
+                conf->MaxRanges, conf->UsePHP, conf->PathPHP, conf->ShowMediaFiles, conf->ClientMaxBodySize, 
                 conf->index_html, conf->index_php, conf->index_pl, conf->index_fcgi);
-    printf("   %s;\n   %s\n\n", conf->ROOTDIR, conf->CGIDIR);
+    printf("   %s;\n   %s\n\n", conf->DocumentRoot, conf->ScriptPath);
 
     fcgi_list_addr *i = conf->fcgi_list;
-    for (; i; i = i->next)
+    for ( ; i; i = i->next)
     {
         fprintf(stdout, "   [%s] : [%s]\n", i->scrpt_name, i->addr);
     }
@@ -323,7 +323,7 @@ int main_proc()
         }
     }
 
-    create_proc(conf->NUM_PROC);
+    create_proc(conf->NumProc);
     fprintf(stdout, "   pid=%u, uid=%u, gid=%u\n", pid, getuid(), getgid());
     fprintf(stderr, "   pid=%u, uid=%u, gid=%u\n", pid, getuid(), getgid());
 
@@ -339,13 +339,11 @@ int main_proc()
         exit (EXIT_FAILURE);
     }
     //------------------------------------------------------------------
-    for (int i = 0; i < conf->NUM_PROC; ++i)
+    for (int i = 0; i < conf->NumProc; ++i)
         numConn[i] = 0;
     //--------------------------------------------------------------
     if (qu_init())
-    {
         return -1;
-    }
     
     pthread_t thr_send_sock;
     int n = pthread_create(&thr_send_sock, NULL, thread_send_socket, NULL);
@@ -452,7 +450,7 @@ int main_proc()
         }
     }
 
-    for (int i = 0; i < conf->NUM_PROC; ++i)
+    for (int i = 0; i < conf->NumProc; ++i)
     {
         char ch = i;
         int ret = send_fd(unixFD[i], -1, &ch, 1);
@@ -478,7 +476,7 @@ int main_proc()
     
     close(from_chld[0]);
     
-    close_queue_sock();
+    thread_queue_close();
     pthread_join(thr_send_sock, NULL);
 
     while ((pid = wait(NULL)) != -1)
@@ -560,23 +558,23 @@ int seng_fd_timeout(int unix_sock, int fd, struct sockaddr_storage *addr, sockle
 }
 //======================================================================
 static int *buf_queue_sock = NULL;   // buffer queue sockets
-static int size_qu, i_push, i_pop, thr_queue_close;
+static int size_qu, i_push, i_pop, thr_close;
 
 static pthread_mutex_t mtx_sock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cond_push_sock = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t cond_close_conn = PTHREAD_COND_INITIALIZER;
 //----------------------------------------------------------------------
-static void close_queue_sock()
+static void thread_queue_close()
 {
-    thr_queue_close = 1;
+    thr_close = 1;
     pthread_cond_signal(&cond_push_sock);
 }
 //----------------------------------------------------------------------
 static int qu_init()
 {
-    size_qu = i_push = i_pop = thr_queue_close = 0;
+    size_qu = i_push = i_pop = thr_close = 0;
 
-    buf_queue_sock = malloc(conf->SIZE_QUEUE_CONNECT * sizeof(int));
+    buf_queue_sock = malloc(conf->SizeQueueConnect * sizeof(int));
     if (!buf_queue_sock)
     {
         fprintf(stderr, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
@@ -589,7 +587,7 @@ static int qu_init()
 int qu_not_full()
 {
 pthread_mutex_lock(&mtx_sock);
-    int ret = conf->SIZE_QUEUE_CONNECT - size_qu;
+    int ret = conf->SizeQueueConnect - size_qu;
 pthread_mutex_unlock(&mtx_sock);
     return ret;
 }
@@ -598,7 +596,7 @@ static void qu_push(int s)
 {
 pthread_mutex_lock(&mtx_sock);
     buf_queue_sock[i_push++] = s;
-    if (i_push >= conf->SIZE_QUEUE_CONNECT)
+    if (i_push >= conf->SizeQueueConnect)
         i_push = 0;
     size_qu++;
 pthread_mutex_unlock(&mtx_sock);
@@ -642,27 +640,27 @@ void *thread_send_socket(void *arg)
         while (size_qu == 0)
         {
             pthread_cond_wait(&cond_push_sock, &mtx_sock);
-            if (thr_queue_close)
+            if (thr_close)
                 break;
         }
         sock = buf_queue_sock[i_pop];
         
-        for ( i = 0; thr_queue_close == 0; )
+        for ( i = 0; thr_close == 0; )
         {
-            if (numConn[i] < conf->MAX_WORK_CONNECT)
+            if (numConn[i] < conf->MaxWorkConnect)
                 break;
             ++i;
-            if (i >= conf->NUM_PROC)
+            if (i >= conf->NumProc)
             {
                 pthread_cond_wait(&cond_close_conn, &mtx_sock);
-                if (thr_queue_close)
+                if (thr_close)
                     break;
                 i = 0;
             }
         }
     pthread_mutex_unlock(&mtx_sock);
  
-        if (thr_queue_close)
+        if (thr_close)
         {
             free(buf_queue_sock);
             buf_queue_sock = NULL;
@@ -690,7 +688,7 @@ void *thread_send_socket(void *arg)
     pthread_mutex_unlock(&mtx_sock);
         //--------------------------------------------------------------
         i_pop++;
-        if (i_pop >= conf->SIZE_QUEUE_CONNECT)
+        if (i_pop >= conf->SizeQueueConnect)
             i_pop = 0;
     }
     return NULL;

@@ -30,7 +30,7 @@ int send_part_file(Connect *req)
     if (req->respContentLength == 0)
         return 0;
 #if defined(SEND_FILE_) && (defined(LINUX_) || defined(FREEBSD_))
-    if (conf->SEND_FILE == 'y')
+    if (conf->SendFile == 'y')
     {
         if (req->respContentLength >= size_buf)
             len = size_buf;
@@ -196,7 +196,7 @@ pthread_mutex_unlock(&mtx_);
 //======================================================================
 int poll_(int num_chld, int i, int nfd)
 {
-    int ret = poll(pollfd_arr + i, nfd, conf->TIMEOUT_POLL);
+    int ret = poll(pollfd_arr + i, nfd, conf->TimeoutPoll);
     if (ret == -1)
     {
         print_err("[%d]<%s:%d> Error poll(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
@@ -280,11 +280,23 @@ void *event_handler(void *arg)
 {
     int num_chld = *((int*)arg);
     int count_resp = 0;
-    size_buf = conf->SNDBUF_SIZE;
+    size_buf = conf->SndBufSize;
     snd_buf = NULL;
 
+    if (conf->MaxEventConnect <= 0)
+    {
+        print_err("[%d]<%s:%d> Error config file: MaxEventConnect=%d\n", num_chld, __func__, __LINE__, conf->MaxEventConnect);
+        exit(1);
+    }
+    
+    if (conf->SndBufSize <= 0)
+    {
+        print_err("[%d]<%s:%d> Error config file: SndBufSize=%d\n", num_chld, __func__, __LINE__, conf->SndBufSize);
+        exit(1);
+    }
+
 #if defined(SEND_FILE_) && (defined(LINUX_) || defined(FREEBSD_))
-    if (conf->SEND_FILE != 'y')
+    if (conf->SendFile != 'y')
 #endif
     {
         snd_buf = malloc(size_buf);
@@ -295,14 +307,14 @@ void *event_handler(void *arg)
         }
     }
 
-    pollfd_arr = malloc(sizeof(struct pollfd) * conf->MAX_WORK_CONNECT);
+    pollfd_arr = malloc(sizeof(struct pollfd) * conf->MaxWorkConnect);
     if (!pollfd_arr)
     {
         print_err("[%d]<%s:%d> Error malloc(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
         exit(1);
     }
 
-    conn_array = malloc(sizeof(Connect*) * conf->MAX_WORK_CONNECT);
+    conn_array = malloc(sizeof(Connect*) * conf->MaxWorkConnect);
     if (!conn_array)
     {
         print_err("[%d]<%s:%d> Error malloc(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
@@ -328,8 +340,8 @@ pthread_mutex_unlock(&mtx_);
         int nfd;
         for (int i = 0; count_resp > 0; )
         {
-            if (count_resp > conf->MAX_EVENT_CONNECT)
-                nfd = conf->MAX_EVENT_CONNECT;
+            if (count_resp > conf->MaxEventConnect)
+                nfd = conf->MaxEventConnect;
             else
                 nfd = count_resp;
 
@@ -350,7 +362,7 @@ pthread_mutex_unlock(&mtx_);
     free(pollfd_arr);
     free(conn_array);
 #if defined(SEND_FILE_) && (defined(LINUX_) || defined(FREEBSD_))
-    if (conf->SEND_FILE != 'y')
+    if (conf->SendFile != 'y')
 #endif
         if (snd_buf)
             free(snd_buf);

@@ -24,7 +24,7 @@ static int send_chunk(chunked *chk, int size)
         len = chk->i - MAX_LEN_SIZE_CHUNK;
     }
     
-    int ret = write_timeout(chk->sock, p, len, conf->TIMEOUT);
+    int ret = write_timeout(chk->sock, p, len, conf->TimeOut);
     chk->i = MAX_LEN_SIZE_CHUNK;
     if (ret < 0)
     {
@@ -164,7 +164,7 @@ int cgi_to_client(chunked *chk, int fdPipe)
         }
         
         int rd = CHUNK_SIZE_BUF + MAX_LEN_SIZE_CHUNK - chk->i;
-        int ret = read_timeout(fdPipe, chk->buf + chk->i, rd, conf->TIMEOUT_CGI);
+        int ret = read_timeout(fdPipe, chk->buf + chk->i, rd, conf->TimeoutCGI);
         if (ret == 0)
         {
             print_err("<%s:%d> ret=%d\n", __func__, __LINE__, ret);
@@ -196,7 +196,7 @@ int fcgi_to_client(chunked *chk, int fdPipe, int len)
     if (chk->mode == NO_SEND)
     {
         chk->allSend += len;
-        fcgi_to_cosmos(fdPipe, len, conf->TIMEOUT_CGI);
+        fcgi_to_cosmos(fdPipe, len, conf->TimeoutCGI);
         return 0;
     }
     
@@ -213,7 +213,7 @@ int fcgi_to_client(chunked *chk, int fdPipe, int len)
         }
             
         int rd = (len < (CHUNK_SIZE_BUF + MAX_LEN_SIZE_CHUNK - chk->i)) ? len : (CHUNK_SIZE_BUF + MAX_LEN_SIZE_CHUNK - chk->i);
-        int ret = read_timeout(fdPipe, chk->buf + chk->i, rd, conf->TIMEOUT_CGI);
+        int ret = read_timeout(fdPipe, chk->buf + chk->i, rd, conf->TimeoutCGI);
         if (ret == 0)
         {
             print_err("<%s:%d> ret=%d\n", __func__, __LINE__, ret);

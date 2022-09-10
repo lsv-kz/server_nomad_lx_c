@@ -14,9 +14,9 @@ int create_server_socket(const Config *conf)
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
 
-    if ((n = getaddrinfo(conf->SERVER_ADDR, conf->SERVER_PORT, &hints, &result)) != 0) 
+    if ((n = getaddrinfo(conf->ServerAddr, conf->ServerPort, &hints, &result)) != 0) 
     {
-        fprintf(stderr, "Error getaddrinfo(%s:%s): %s\n", conf->SERVER_ADDR, conf->SERVER_PORT, gai_strerror(n));
+        fprintf(stderr, "Error getaddrinfo(%s:%s): %s\n", conf->ServerAddr, conf->ServerPort, gai_strerror(n));
         return -1;
     }  
 
@@ -59,7 +59,7 @@ int create_server_socket(const Config *conf)
 
     freeaddrinfo(result);
 
-    if (listen(sockfd, conf->LISTEN_BACKLOG) == -1) 
+    if (listen(sockfd, conf->ListenBacklog) == -1) 
     {
         fprintf(stderr, "Error listen(): %s\n", strerror(errno));
         close(sockfd);

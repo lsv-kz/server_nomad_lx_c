@@ -61,7 +61,7 @@ void response1(int num_chld)
             goto end;
         }
 
-        if (req->numReq >= conf->MAX_REQUESTS_PER_THR || (conf->KEEP_ALIVE == 'n') || (req->httpProt == HTTP10))
+        if (req->numReq >= conf->MaxRequestsPerClient || (conf->KeepAlive == 'n') || (req->httpProt == HTTP10))
             req->connKeepAlive = 0;
         else if (req->req_hd.iConnection == -1)
             req->connKeepAlive = 1;
@@ -111,14 +111,14 @@ void response1(int num_chld)
         //--------------------------------------------------------------
         if ((req->reqMethod == M_GET) || (req->reqMethod == M_HEAD) || (req->reqMethod == M_POST))
         {
-            lenRootDir = strlen(conf->ROOTDIR);
-            lenCgiDir = strlen(conf->CGIDIR);
+            lenRootDir = strlen(conf->DocumentRoot);
+            lenCgiDir = strlen(conf->ScriptPath);
             if ((lenCgiDir - lenRootDir) < 0)
                 req->sizePath = lenRootDir + req->lenDecodeUri + 256 + 1;
             else
                 req->sizePath = lenCgiDir + req->lenDecodeUri + 256 + 1;
 
-            str_cpy(&req->path, conf->ROOTDIR);
+            str_cpy(&req->path, conf->DocumentRoot);
             str_cat(&req->path, req->decodeUri);
             if (req->path.err == 0)
             {
@@ -430,7 +430,7 @@ int response2(Connect *req)
 
     if (req->numPart > 1)
     {
-        int size_buf = conf->SNDBUF_SIZE;
+        int size_buf = conf->SndBufSize;
         char *rd_buf = malloc(size_buf);
         if (!rd_buf)
         {
@@ -509,7 +509,7 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
             return -1;
         } 
 
-        n = write_timeout(req->clientSocket, buf, strlen(buf), conf->TIMEOUT);
+        n = write_timeout(req->clientSocket, buf, strlen(buf), conf->TimeOut);
         if (n < 0)
         {
             print_err("<%s:%d> Error: Sent %lld bytes\n", __func__, __LINE__, send_all_bytes);
@@ -529,7 +529,7 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
     }
 
     snprintf(buf, sizeof(buf), "\r\n--%s--\r\n", boundary);
-    n = write_timeout(req->clientSocket, buf, strlen(buf), conf->TIMEOUT);
+    n = write_timeout(req->clientSocket, buf, strlen(buf), conf->TimeOut);
     req->send_bytes = send_all_bytes + n;
     if (n < 0)
     {

@@ -44,17 +44,17 @@ void create_conf_file()
     }
 
     fprintf(f, "ServerAddr   %s\n", "0.0.0.0");
-    fprintf(f, "Port         ? \n");
+    fprintf(f, "ServerPort    ? \n");
     fprintf(f, "ServerSoftware   ? \n");
 
     fprintf(f, "DocumentRoot ?\n");
     fprintf(f, "ScriptPath   ?\n");
     fprintf(f, "LogPath      ?\n");
-    fprintf(f, "PidDir      ?\n\n");
+    fprintf(f, "PidFilePath      ?\n\n");
 
     fprintf(f, "ListenBacklog 128\n");
     fprintf(f, "tcp_cork   n \n");
-    fprintf(f, "TcpNoDelay   y \n\n");
+    fprintf(f, "tcp_nodelay   y \n\n");
 
     fprintf(f, "SendFile   n \n");
     fprintf(f, "SndBufSize   32768\n\n");
@@ -68,7 +68,7 @@ void create_conf_file()
     fprintf(f, "MinThreads 6\n");
     fprintf(f, "MaxProcCgi 30\n\n");
     
-    fprintf(f, "MaxRequestsPerThr 100\n\n");
+    fprintf(f, "MaxRequestsPerClient 100\n\n");
 
     fprintf(f, "KeepAlive   y\n");
     fprintf(f, "TimeoutKeepAlive 30\n");
@@ -352,65 +352,65 @@ int read_conf_file_(FILE *f)
             return -1;
 
         if (!strcmp(s1, "ServerAddr") && (n == 2))
-            err = get_word(&ln, c.SERVER_ADDR, sizeof(c.SERVER_ADDR));
-        else if (!strcmp(s1, "Port") && (n == 2))
-            err = get_word(&ln, c.SERVER_PORT, sizeof(c.SERVER_PORT));
+            err = get_word(&ln, c.ServerAddr, sizeof(c.ServerAddr));
+        else if (!strcmp(s1, "ServerPort") && (n == 2))
+            err = get_word(&ln, c.ServerPort, sizeof(c.ServerPort));
         else if (!strcmp(s1, "ServerSoftware") && (n == 2))
-            err = get_word(&ln, c.SERVER_SOFTWARE, sizeof(c.SERVER_SOFTWARE));
+            err = get_word(&ln, c.ServerSoftware, sizeof(c.ServerSoftware));
         else if (!strcmp(s1, "DocumentRoot") && (n == 2))
-            err = get_word(&ln, c.ROOTDIR, sizeof(c.ROOTDIR));
+            err = get_word(&ln, c.DocumentRoot, sizeof(c.DocumentRoot));
         else if (!strcmp(s1, "ScriptPath") && (n == 2))
-            err = get_word(&ln, c.CGIDIR, sizeof(c.CGIDIR));
+            err = get_word(&ln, c.ScriptPath, sizeof(c.ScriptPath));
         else if (!strcmp(s1, "LogPath") && (n == 2))
-            err = get_word(&ln, c.LOGDIR, sizeof(c.LOGDIR));
-        else if (!strcmp(s1, "PidDir") && (n == 2))
-            err = get_word(&ln, c.PIDDIR, sizeof(c.PIDDIR));
+            err = get_word(&ln, c.LogPath, sizeof(c.LogPath));
+        else if (!strcmp(s1, "PidFilePath") && (n == 2))
+            err = get_word(&ln, c.PidFilePath, sizeof(c.PidFilePath));
         else if (!strcmp(s1, "UsePHP") && (n == 2))
             err = get_word(&ln, c.UsePHP, sizeof(c.UsePHP));
         else if (!strcmp(s1, "PathPHP") && (n == 2))
             err = get_word(&ln, c.PathPHP, sizeof(c.PathPHP));
         else if (!strcmp(s1, "ListenBacklog") && (n == 2))
-            err = get_int(&ln, &c.LISTEN_BACKLOG);
+            err = get_int(&ln, &c.ListenBacklog);
         else if (!strcmp(s1, "tcp_cork") && (n == 2))
             err = get_bool(&ln, &(c.tcp_cork));
-        else if (!strcmp(s1, "TcpNoDelay") && (n == 2))
+        else if (!strcmp(s1, "tcp_nodelay") && (n == 2))
             err = get_bool(&ln, &(c.tcp_nodelay));
         else if (!strcmp(s1, "SendFile") && (n == 2))
-            err = get_bool(&ln, &(c.SEND_FILE));
+            err = get_bool(&ln, &(c.SendFile));
         else if (!strcmp(s1, "SndBufSize") && (n == 2))
-            err = get_int(&ln, &c.SNDBUF_SIZE);
+            err = get_int(&ln, &c.SndBufSize);
         else if (!strcmp(s1, "MaxEventConnect") && (n == 2))
-            err = get_int(&ln, &c.MAX_EVENT_CONNECT);
+            err = get_int(&ln, &c.MaxEventConnect);
         else if (!strcmp(s1, "SizeQueueConnect") && (n == 2))
-            err = get_int(&ln, &c.SIZE_QUEUE_CONNECT);
+            err = get_int(&ln, &c.SizeQueueConnect);
         else if (!strcmp(s1, "MaxWorkConnect") && (n == 2))
-            err = get_int(&ln, &c.MAX_WORK_CONNECT);
+            err = get_int(&ln, &c.MaxWorkConnect);
         else if (!strcmp(s1, "NumProc") && (n == 2))
-            err = get_int(&ln, &c.NUM_PROC);
+            err = get_int(&ln, &c.NumProc);
         else if (!strcmp(s1, "MaxThreads") && (n == 2))
-            err = get_int(&ln, &c.MAX_THREADS);
+            err = get_int(&ln, &c.MaxThreads);
         else if (!strcmp(s1, "MinThreads") && (n == 2))
-            err = get_int(&ln, &c.MIN_THREADS);
-        else if (!strcmp(s1, "MaxRequestsPerThr") && (n == 2))
-            err = get_int(&ln, &c.MAX_REQUESTS_PER_THR);
+            err = get_int(&ln, &c.MinThreads);
+        else if (!strcmp(s1, "MaxRequestsPerClient") && (n == 2))
+            err = get_int(&ln, &c.MaxRequestsPerClient);
         else if (!strcmp(s1, "MaxProcCgi") && (n == 2))
-            err = get_int(&ln, &c.MAX_PROC_CGI);
+            err = get_int(&ln, &c.MaxProcCgi);
         else if (!strcmp(s1, "KeepAlive") && (n == 2))
-            err = get_bool(&ln, &c.KEEP_ALIVE);
+            err = get_bool(&ln, &c.KeepAlive);
         else if (!strcmp(s1, "TimeoutKeepAlive") && (n == 2))
-            err = get_int(&ln, &c.TIMEOUT_KEEP_ALIVE);
+            err = get_int(&ln, &c.TimeoutKeepAlive);
         else if (!strcmp(s1, "TimeOut") && (n == 2))
-            err = get_int(&ln, &c.TIMEOUT);
+            err = get_int(&ln, &c.TimeOut);
         else if (!strcmp(s1, "TimeoutCGI") && (n == 2))
-            err = get_int(&ln, &c.TIMEOUT_CGI);
+            err = get_int(&ln, &c.TimeoutCGI);
         else if (!strcmp(s1, "TimeoutPoll") && (n == 2))
-            err = get_int(&ln, &c.TIMEOUT_POLL);
+            err = get_int(&ln, &c.TimeoutPoll);
         else if (!strcmp(s1, "MaxRanges") && (n == 2))
-            err = get_int(&ln, &c.MAX_RANGES);
+            err = get_int(&ln, &c.MaxRanges);
         else if (!strcmp(s1, "ShowMediaFiles") && (n == 2))
-            err = get_bool(&ln, &c.SHOW_MEDIA_FILES);
+            err = get_bool(&ln, &c.ShowMediaFiles);
         else if (!strcmp(s1, "ClientMaxBodySize") && (n == 2))
-            err = get_long(&ln, &c.CLIENT_MAX_BODY_SIZE);
+            err = get_long(&ln, &c.ClientMaxBodySize);
         else if (!strcmp(s1, "User") && (n == 2))
             err = get_word(&ln, c.user, sizeof(c.user));
         else if (!strcmp(s1, "Group") && (n == 2))
@@ -495,78 +495,81 @@ int read_conf_file_(FILE *f)
         return -1;
     }
     //------------------------------------------------------------------
-    if (check_path(c.LOGDIR, sizeof(c.LOGDIR)) == -1)
+    if (check_path(c.LogPath, sizeof(c.LogPath)) == -1)
     {
-        fprintf(stderr, "!!! Error logDir [%s]\n", c.LOGDIR);
+        fprintf(stderr, "!!! Error LogPath [%s]\n", c.LogPath);
         return -1;
     }
     //------------------------------------------------------------------
-    if (check_path(c.ROOTDIR, sizeof(c.ROOTDIR)) == -1)
+    if (check_path(c.DocumentRoot, sizeof(c.DocumentRoot)) == -1)
     {
-        fprintf(stderr, "!!! Error rootDir [%s]\n", c.ROOTDIR);
+        fprintf(stderr, "!!! Error DocumentRoot [%s]\n", c.DocumentRoot);
         return -1;
     }
     //------------------------------------------------------------------
-    if (check_path(c.CGIDIR, sizeof(c.CGIDIR)) == -1)
+    if (check_path(c.ScriptPath, sizeof(c.ScriptPath)) == -1)
     {
-        c.CGIDIR[0] = '\0';
-        fprintf(stderr, "!!! Error ScriptPath [%s]\n", c.CGIDIR);
+        c.ScriptPath[0] = '\0';
+        fprintf(stderr, "!!! Error ScriptPath [%s]\n", c.ScriptPath);
     }
     //------------------------------------------------------------------
-    if (check_path(c.PIDDIR, sizeof(c.PIDDIR)) == -1)
+    if (check_path(c.PidFilePath, sizeof(c.PidFilePath)) == -1)
     {
-        fprintf(stderr, "!!! Error PidDir [%s]\n", c.PIDDIR);
+        fprintf(stderr, "!!! Error PidFilePath [%s]\n", c.PidFilePath);
         return -1;
     }
     //------------------------------------------------------------------
-    if ((c.NUM_PROC < 1) || (c.NUM_PROC > 8))
+    if ((c.NumProc < 1) || (c.NumProc > 8))
     {
-        fprintf(stderr, "<%s:%d> Error NumProc = %d; [1 < NumProc <= 6]\n", __func__, __LINE__, c.NUM_PROC);
+        fprintf(stderr, "<%s:%d> Error config file: NumProc = %d; [1 < NumProc <= 6]\n", __func__, __LINE__, c.NumProc);
         return -1;
     }
 
-    if (c.MIN_THREADS > c.MAX_THREADS)
+    if (c.MinThreads < 1)
+        c.MinThreads = 1;
+
+    if (c.MinThreads > c.MaxThreads)
     {
-        fprintf(stderr, "<%s:%d> Error: NumThreads > MaxThreads\n", __func__, __LINE__);
+        fprintf(stderr, "<%s:%d> Error config file: NumThreads > MaxThreads\n", __func__, __LINE__);
         return -1;
     }
-
-    if (c.MIN_THREADS < 1)
-        c.MIN_THREADS = 1;
+    //------------------------------------------------------------------
+    if (c.ListenBacklog < 128)
+        c.ListenBacklog = 128;
     //------------------------------------------------------------------
     long max_fd, cur_fd;
     if (get_lim_max_fd(&max_fd, &cur_fd) == -1)
         return -1;
     // main process: fd_stdio = 3, fd_logs = 2, sock = 1 + 1 + NumProc, fd_pipe = 1; // 8 + NumProc
-    int min_open_fd = 8 + c.NUM_PROC;
-    if (c.SIZE_QUEUE_CONNECT <= 0)
+    int min_open_fd = 8 + c.NumProc;
+    if (c.SizeQueueConnect <= 0)
     {
-        fprintf(stderr, "<%s:%d> Error: SIZE_QUEUE_SOCK=?\n", __func__, __LINE__);
+        fprintf(stderr, "<%s:%d> Error config file: SizeQueueConnect=?\n", __func__, __LINE__);
         return -1;
     }
 
-    if ((min_open_fd + c.SIZE_QUEUE_CONNECT) > cur_fd)
+    if ((min_open_fd + c.SizeQueueConnect) > cur_fd)
     {
-        n = set_max_fd(min_open_fd + c.SIZE_QUEUE_CONNECT);
+        n = set_max_fd(min_open_fd + c.SizeQueueConnect);
         if (n < 0)
             return -1;
 
-        if ((min_open_fd + c.SIZE_QUEUE_CONNECT) > n)
-            c.SIZE_QUEUE_CONNECT = n - min_open_fd;
+        if ((min_open_fd + c.SizeQueueConnect) > n)
+            c.SizeQueueConnect = n - min_open_fd;
     }
     // child process: fd_stdio = 3, fd_logs = 2, sock = 3, fd_pipe = 1; // 9
     min_open_fd = 9;
-    if (c.MAX_WORK_CONNECT <= min_open_fd)
+    if (c.MaxWorkConnect <= min_open_fd)
     {
-        fprintf(stderr, "<%s:%d> Error: MAX_REQUESTS=?\n", __func__, __LINE__);
+        fprintf(stderr, "<%s:%d> Error config file: MaxWorkConnect=?\n", __func__, __LINE__);
         return -1;
     }
 
-    n = min_open_fd + (c.MAX_WORK_CONNECT * 2);
+    n = min_open_fd + (c.MaxWorkConnect * 2);
     if (n > cur_fd)
     {
         if (n > max_fd)
-            c.MAX_WORK_CONNECT = (max_fd - min_open_fd)/2;
+            c.MaxWorkConnect = (max_fd - min_open_fd)/2;
     }
 
     return 0;
@@ -678,7 +681,7 @@ int read_conf_file(const char *path_conf)
 //======================================================================
 void set_max_conn(int n)
 {
-    c.MAX_WORK_CONNECT = n;
+    c.MaxWorkConnect = n;
 }
 //======================================================================
 long get_lim_max_fd(long *max, long *cur)

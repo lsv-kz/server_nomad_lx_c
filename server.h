@@ -87,46 +87,46 @@ typedef struct {
 //======================================================================
 typedef struct Config
 {
-    char SERVER_SOFTWARE[48];
-    char SERVER_ADDR[128];
-    char SERVER_PORT[16];
+    char ServerSoftware[48];
+    char ServerAddr[128];
+    char ServerPort[16];
 
-    char ROOTDIR[MAX_PATH];
-    char CGIDIR[MAX_PATH];
-    char LOGDIR[MAX_PATH];
-    char PIDDIR[512];
+    char DocumentRoot[MAX_PATH];
+    char ScriptPath[MAX_PATH];
+    char LogPath[MAX_PATH];
+    char PidFilePath[512];
 
     char UsePHP[16];
     char PathPHP[MAX_PATH];
 
-    int LISTEN_BACKLOG;
+    int ListenBacklog;
     char tcp_cork;
     char tcp_nodelay;
 
-    char SEND_FILE;
-    int SNDBUF_SIZE;
-    int MAX_EVENT_CONNECT;
+    char SendFile;
+    int SndBufSize;
+    int MaxEventConnect;
     
-    int SIZE_QUEUE_CONNECT;
-    int MAX_WORK_CONNECT;
+    int SizeQueueConnect;
+    int MaxWorkConnect;
 
-    int NUM_PROC;
-    int MAX_THREADS;
-    int MIN_THREADS;
-    int MAX_REQUESTS_PER_THR;
-    int MAX_PROC_CGI;
+    int NumProc;
+    int MaxThreads;
+    int MinThreads;
+    int MaxProcCgi;
 
-    char KEEP_ALIVE;
-    int TIMEOUT_KEEP_ALIVE;
-    int TIMEOUT;
-    int TIMEOUT_CGI;
-    int TIMEOUT_POLL;
+    int MaxRequestsPerClient;
+    char KeepAlive;
+    int TimeoutKeepAlive;
+    int TimeOut;
+    int TimeoutCGI;
+    int TimeoutPoll;
 
-    int MAX_RANGES;
+    int MaxRanges;
 
-    long int CLIENT_MAX_BODY_SIZE;
+    long int ClientMaxBodySize;
 
-    char SHOW_MEDIA_FILES;
+    char ShowMediaFiles;
 
     char index_html;
     char index_php;
