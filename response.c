@@ -61,7 +61,7 @@ void response1(int num_chld)
             goto end;
         }
 
-        if (req->numReq >= conf->MaxRequestsPerClient || (conf->KeepAlive == 'n') || (req->httpProt == HTTP10))
+        if (req->numReq >= conf->MaxRequestsPerClient || (req->httpProt == HTTP10))
             req->connKeepAlive = 0;
         else if (req->req_hd.iConnection == -1)
             req->connKeepAlive = 1;
@@ -509,7 +509,7 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
             return -1;
         } 
 
-        n = write_timeout(req->clientSocket, buf, strlen(buf), conf->TimeOut);
+        n = write_timeout(req->clientSocket, buf, strlen(buf), conf->Timeout);
         if (n < 0)
         {
             print_err("<%s:%d> Error: Sent %lld bytes\n", __func__, __LINE__, send_all_bytes);
@@ -529,7 +529,7 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
     }
 
     snprintf(buf, sizeof(buf), "\r\n--%s--\r\n", boundary);
-    n = write_timeout(req->clientSocket, buf, strlen(buf), conf->TimeOut);
+    n = write_timeout(req->clientSocket, buf, strlen(buf), conf->Timeout);
     req->send_bytes = send_all_bytes + n;
     if (n < 0)
     {

@@ -272,7 +272,7 @@ int main_proc()
                 "   SendFile = %c\n"
                 "   SndBufSize = %d\n\n"
 
-                "   SizeQueueConnect = %d\n"
+                "   ConnectionsQueueSize = %d\n"
                 "   MaxWorkConnect = %d\n"
                 "   MaxEventConnect = %d\n\n"
 
@@ -281,9 +281,9 @@ int main_proc()
                 "   MimThreads = %d\n"
                 "   MaxProcCgi = %d\n\n"
 
-                "   KeepAlive %c\n"
+                "   MaxRequestsPerClient %d\n"
                 "   TimeoutKeepAlive = %d\n"
-                "   TimeOut = %d\n"
+                "   Timeout = %d\n"
                 "   TimeOutCGI = %d\n"
                 "   TimeoutPoll = %d\n\n"
 
@@ -300,9 +300,9 @@ int main_proc()
                 "   index.pl = %c\n"
                 "   index.fcgi = %c\n",
                 s, conf->ServerSoftware, conf->ServerAddr, conf->ServerPort, conf->ListenBacklog, conf->tcp_cork, 
-                conf->tcp_nodelay, conf->SendFile, conf->SndBufSize, conf->SizeQueueConnect, conf->MaxWorkConnect,  
+                conf->tcp_nodelay, conf->SendFile, conf->SndBufSize, conf->ConnectionsQueueSize, conf->MaxWorkConnect,  
                 conf->MaxEventConnect, conf->NumProc, conf->MaxThreads, conf->MinThreads, conf->MaxProcCgi,  
-                conf->KeepAlive, conf->TimeoutKeepAlive, conf->TimeOut, conf->TimeoutCGI, conf->TimeoutPoll, 
+                conf->MaxRequestsPerClient, conf->TimeoutKeepAlive, conf->Timeout, conf->TimeoutCGI, conf->TimeoutPoll, 
                 conf->MaxRanges, conf->UsePHP, conf->PathPHP, conf->ShowMediaFiles, conf->ClientMaxBodySize, 
                 conf->index_html, conf->index_php, conf->index_pl, conf->index_fcgi);
     printf("   %s;\n   %s\n\n", conf->DocumentRoot, conf->ScriptPath);
@@ -574,7 +574,7 @@ static int qu_init()
 {
     size_qu = i_push = i_pop = thr_close = 0;
 
-    buf_queue_sock = malloc(conf->SizeQueueConnect * sizeof(int));
+    buf_queue_sock = malloc(conf->ConnectionsQueueSize * sizeof(int));
     if (!buf_queue_sock)
     {
         fprintf(stderr, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
@@ -587,7 +587,7 @@ static int qu_init()
 int qu_not_full()
 {
 pthread_mutex_lock(&mtx_sock);
-    int ret = conf->SizeQueueConnect - size_qu;
+    int ret = conf->ConnectionsQueueSize - size_qu;
 pthread_mutex_unlock(&mtx_sock);
     return ret;
 }
@@ -596,7 +596,7 @@ static void qu_push(int s)
 {
 pthread_mutex_lock(&mtx_sock);
     buf_queue_sock[i_push++] = s;
-    if (i_push >= conf->SizeQueueConnect)
+    if (i_push >= conf->ConnectionsQueueSize)
         i_push = 0;
     size_qu++;
 pthread_mutex_unlock(&mtx_sock);
@@ -670,7 +670,7 @@ void *thread_send_socket(void *arg)
         int ret = send_fd(unixFD[i], sock, data, sizeof(data));
         if (ret == -ENOBUFS)
         {
-            //print_err("<%s:%d> Error send_fd(%d), ENOBUFS\n", __func__, __LINE__, sock);
+            print_err("<%s:%d> Error send_fd(%d), ENOBUFS\n", __func__, __LINE__, sock);
             timedwait_close_connect();
             continue;
         }
@@ -688,7 +688,7 @@ void *thread_send_socket(void *arg)
     pthread_mutex_unlock(&mtx_sock);
         //--------------------------------------------------------------
         i_pop++;
-        if (i_pop >= conf->SizeQueueConnect)
+        if (i_pop >= conf->ConnectionsQueueSize)
             i_pop = 0;
     }
     return NULL;

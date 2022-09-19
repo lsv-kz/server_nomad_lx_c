@@ -257,7 +257,7 @@ static void sig_handler(int sig)
 {
     if (sig == SIGINT)
     {
-        print_err("[%d] <%s:%d> ### SIGINT ### all requests: %d\n", nProc, __func__, __LINE__, all_req);
+        print_err("[%d] <%s:%d> ### SIGINT ### all requests: %d, num thr: %d\n", nProc, __func__, __LINE__, all_req, num_wait_thr);
         shutdown(servSock, SHUT_RDWR);
         close(servSock);
         shutdown(uxSock, SHUT_RDWR);
@@ -273,7 +273,7 @@ static void sig_handler(int sig)
 int manager(int sockServer, int numProc, int to_parent)
 {
     int n;
-    unsigned long allConn = 0, i;
+    unsigned long allConn = 1, i;
     int num_thr;
     pthread_t thr_handler, thr_man;
     int par[3];
@@ -333,7 +333,6 @@ int manager(int sockServer, int numProc, int to_parent)
         }
         set_max_conn((n - min_open_fd)/2);
     }
-    //printf("<%s:%d> MaxWorkConnect=%d\n", __func__, __LINE__, conf->MaxWorkConnect);
     //------------------------------------------------------------------
     if (chdir(conf->DocumentRoot))
     {
@@ -408,10 +407,10 @@ int manager(int sockServer, int numProc, int to_parent)
 
         req->numProc = numProc;
         req->numConn = allConn++;
-        req->numReq = 0;
+        req->numReq = 1;
         req->serverSocket = sockServer;
         req->clientSocket = clientSocket;
-        req->timeout = conf->TimeOut;
+        req->timeout = conf->Timeout;
         req->remoteAddr[0] = '\0';
         getpeername(clientSocket,(struct sockaddr *)&clientAddr, &addrSize);
         n = getnameinfo((struct sockaddr *)&clientAddr, 

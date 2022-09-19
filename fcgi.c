@@ -252,9 +252,9 @@ int client_to_fcgi(int sock_cl, int fcgi_sock, int contentLength)
     while(contentLength > 0)
     {
         if (contentLength > size_buf)
-            rd = read_timeout(sock_cl, buf + 8, size_buf, conf->TimeOut);
+            rd = read_timeout(sock_cl, buf + 8, size_buf, conf->Timeout);
         else
-            rd = read_timeout(sock_cl, buf + 8, contentLength, conf->TimeOut);
+            rd = read_timeout(sock_cl, buf + 8, contentLength, conf->Timeout);
         if (rd <= 0)
         {
             return -1;

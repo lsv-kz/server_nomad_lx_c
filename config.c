@@ -59,7 +59,7 @@ void create_conf_file()
     fprintf(f, "SendFile   n \n");
     fprintf(f, "SndBufSize   32768\n\n");
 
-    fprintf(f, "SizeQueueConnect 1024\n");
+    fprintf(f, "ConnectionsQueueSize 1024\n");
     fprintf(f, "MaxWorkConnect 512\n");
     fprintf(f, "MaxEventConnect   100\n\n");
 
@@ -68,11 +68,9 @@ void create_conf_file()
     fprintf(f, "MinThreads 6\n");
     fprintf(f, "MaxProcCgi 30\n\n");
     
-    fprintf(f, "MaxRequestsPerClient 100\n\n");
-
-    fprintf(f, "KeepAlive   y\n");
+    fprintf(f, "MaxRequestsPerClient 100\n");
     fprintf(f, "TimeoutKeepAlive 30\n");
-    fprintf(f, "TimeOut    60\n");
+    fprintf(f, "Timeout    60\n");
     fprintf(f, "TimeoutCGI 10\n");
     fprintf(f, "TimeoutPoll 10\n\n");
 
@@ -381,8 +379,8 @@ int read_conf_file_(FILE *f)
             err = get_int(&ln, &c.SndBufSize);
         else if (!strcmp(s1, "MaxEventConnect") && (n == 2))
             err = get_int(&ln, &c.MaxEventConnect);
-        else if (!strcmp(s1, "SizeQueueConnect") && (n == 2))
-            err = get_int(&ln, &c.SizeQueueConnect);
+        else if (!strcmp(s1, "ConnectionsQueueSize") && (n == 2))
+            err = get_int(&ln, &c.ConnectionsQueueSize);
         else if (!strcmp(s1, "MaxWorkConnect") && (n == 2))
             err = get_int(&ln, &c.MaxWorkConnect);
         else if (!strcmp(s1, "NumProc") && (n == 2))
@@ -395,12 +393,10 @@ int read_conf_file_(FILE *f)
             err = get_int(&ln, &c.MaxRequestsPerClient);
         else if (!strcmp(s1, "MaxProcCgi") && (n == 2))
             err = get_int(&ln, &c.MaxProcCgi);
-        else if (!strcmp(s1, "KeepAlive") && (n == 2))
-            err = get_bool(&ln, &c.KeepAlive);
         else if (!strcmp(s1, "TimeoutKeepAlive") && (n == 2))
             err = get_int(&ln, &c.TimeoutKeepAlive);
-        else if (!strcmp(s1, "TimeOut") && (n == 2))
-            err = get_int(&ln, &c.TimeOut);
+        else if (!strcmp(s1, "Timeout") && (n == 2))
+            err = get_int(&ln, &c.Timeout);
         else if (!strcmp(s1, "TimeoutCGI") && (n == 2))
             err = get_int(&ln, &c.TimeoutCGI);
         else if (!strcmp(s1, "TimeoutPoll") && (n == 2))
@@ -542,20 +538,20 @@ int read_conf_file_(FILE *f)
         return -1;
     // main process: fd_stdio = 3, fd_logs = 2, sock = 1 + 1 + NumProc, fd_pipe = 1; // 8 + NumProc
     int min_open_fd = 8 + c.NumProc;
-    if (c.SizeQueueConnect <= 0)
+    if (c.ConnectionsQueueSize <= 0)
     {
         fprintf(stderr, "<%s:%d> Error config file: SizeQueueConnect=?\n", __func__, __LINE__);
         return -1;
     }
 
-    if ((min_open_fd + c.SizeQueueConnect) > cur_fd)
+    if ((min_open_fd + c.ConnectionsQueueSize) > cur_fd)
     {
-        n = set_max_fd(min_open_fd + c.SizeQueueConnect);
+        n = set_max_fd(min_open_fd + c.ConnectionsQueueSize);
         if (n < 0)
             return -1;
 
-        if ((min_open_fd + c.SizeQueueConnect) > n)
-            c.SizeQueueConnect = n - min_open_fd;
+        if ((min_open_fd + c.ConnectionsQueueSize) > n)
+            c.ConnectionsQueueSize = n - min_open_fd;
     }
     // child process: fd_stdio = 3, fd_logs = 2, sock = 3, fd_pipe = 1; // 9
     min_open_fd = 9;

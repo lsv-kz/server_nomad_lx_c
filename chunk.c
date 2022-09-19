@@ -24,7 +24,7 @@ static int send_chunk(chunked *chk, int size)
         len = chk->i - MAX_LEN_SIZE_CHUNK;
     }
     
-    int ret = write_timeout(chk->sock, p, len, conf->TimeOut);
+    int ret = write_timeout(chk->sock, p, len, conf->Timeout);
     chk->i = MAX_LEN_SIZE_CHUNK;
     if (ret < 0)
     {

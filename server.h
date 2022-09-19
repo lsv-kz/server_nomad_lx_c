@@ -107,7 +107,7 @@ typedef struct Config
     int SndBufSize;
     int MaxEventConnect;
     
-    int SizeQueueConnect;
+    int ConnectionsQueueSize;
     int MaxWorkConnect;
 
     int NumProc;
@@ -116,9 +116,8 @@ typedef struct Config
     int MaxProcCgi;
 
     int MaxRequestsPerClient;
-    char KeepAlive;
     int TimeoutKeepAlive;
-    int TimeOut;
+    int Timeout;
     int TimeoutCGI;
     int TimeoutPoll;
 
