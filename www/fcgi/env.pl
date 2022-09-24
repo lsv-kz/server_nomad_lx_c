@@ -23,38 +23,38 @@ while($request->Accept() >= 0)
 
 sub env_f
 {
-	my $time = localtime;
+    my $time = localtime;
 
-	my $doc_root = $ENV{'DOCUMENT_ROOT'};
-	my $remote_addr = $ENV{'REMOTE_ADDR'};
-	if (!defined($remote_addr))
-	{
-		$remote_addr = '------';
-	}
+    my $doc_root = $ENV{'DOCUMENT_ROOT'};
+    my $remote_addr = $ENV{'REMOTE_ADDR'};
+    if (!defined($remote_addr))
+    {
+        $remote_addr = '------';
+    }
 
-	my $path = $ENV{'PATH'};
-	if(!defined($path))
-	{
-		$path = '------';
-	}
+    my $path = $ENV{'PATH'};
+    if(!defined($path))
+    {
+        $path = '------';
+    }
 
-	my $meth = $ENV{'REQUEST_METHOD'};
-	if(!defined($meth))
-	{
-		$meth = '------';
-	}
-	
-	my $data = '';
+    my $meth = $ENV{'REQUEST_METHOD'};
+    if(!defined($meth))
+    {
+        $meth = '------';
+    }
+    
+    my $data = '';
 
-	if(($meth =~ /POST/))
-	{
-		$data = <STDIN>;
-#		$data = uri_unescape(<STDIN>);
-	}
+    if(($meth =~ /POST/))
+    {
+        $data = <STDIN>;
+#       $data = uri_unescape(<STDIN>);
+    }
 
-	my $val = ".-./. .+.!.?.,.~.#.&.>.<.^.";
+    my $val = ".-./. .+.!.?.,.~.#.&.>.<.^.";
 
-	print "Content-type: text/html; charset=utf-8\n\n";
+    print "Content-type: text/html; charset=utf-8\n\n";
 print "<!DOCTYPE html>
 <html>
  <head>
@@ -62,24 +62,24 @@ print "<!DOCTYPE html>
   <style>
     body {
         margin-left:50px;
-		margin-right:50px;
-		background: rgb(60,40,40);
-		color: gold;
+        margin-right:50px;
+        background: rgb(60,40,40);
+        color: gold;
     }
   </style>
  </head>
  <body>
 ";
-	foreach (sort keys %ENV)
-	{
-		print "  $_ = $ENV{$_}<br>\n";
-	}
+    foreach (sort keys %ENV)
+    {
+        print "  $_ = $ENV{$_}<br>\n";
+    }
 
 print "
   <p>$data</p>
   <form method=\"$meth\">
    <input type=\"hidden\" name=\"name\" value=\"$val\">
-   <input type=\"submit\" value=\"Get \$ENV\">
+   <input type=\"submit\" value=\"Get ENV\">
   </form>
   <hr>
   $time

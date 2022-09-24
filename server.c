@@ -5,21 +5,23 @@ static int sockServer, sock_sig;
 int create_server_socket(const Config *conf);
 int read_conf_file(const char *path_conf);
 void create_logfiles(const char *log_dir, const char * ServerSoftware);
-int set_uid();
-int main_proc();
 int seng_fd_timeout(int, int, struct sockaddr_storage *, socklen_t, int);
+int set_uid();
+void manager(int sock, int num, int);
+
+static int main_proc();
+static pid_t create_child(int num_chld, int *from_chld);
 
 static int from_chld[2], unixFD[8];
 static pid_t pidArr[8];
 static int numConn[8];
 static char conf_dir[512];
-static int start = 0;
-static int run = 1;
+static char pidFile[MAX_PATH];
 static unsigned int all_conn = 0;
 static char name_sig_sock[32];
-static char pidFile[MAX_PATH];
 static char received_sig = 0;
 enum { RESTART_SIG_ = 1, CLOSE_SIG_,};
+static int start = 0, restart = 1;
 //======================================================================
 static int qu_init();
 static void qu_push(int s);
@@ -72,8 +74,6 @@ int send_sig(const char *sig)
     return 0;
 }
 //======================================================================
-pid_t create_child(int num_chld, int *from_chld);
-//======================================================================
 void create_proc(int NumProc)
 {
     if (pipe(from_chld) < 0)
@@ -125,8 +125,79 @@ void create_proc(int NumProc)
 //======================================================================
 void print_help(const char *name)
 {
-    fprintf(stderr, "Usage: %s [-c configfile] [-s signal]\n   signals: restart, close\n", name);
-    exit(EXIT_FAILURE);
+    fprintf(stderr, "Usage: %s [-l] [-c configfile] [-s signal]\n"
+                    "Options:\n"
+                    "   -h              : help\n"
+                    "   -l              : print system limits\n"
+                    "   -c configfile   : default: \"./server.conf\"\n"
+                    "   -s signal       : restart, close\n", name);
+}
+//======================================================================
+void print_limits()
+{
+    struct rlimit lim;
+    if (getrlimit(RLIMIT_NOFILE, &lim) == -1)
+        fprintf(stdout, "<%s:%d> Error getrlimit(RLIMIT_NOFILE): %s\n", __func__, __LINE__, strerror(errno));
+    else
+        fprintf(stdout, " RLIMIT_NOFILE: cur=%ld, max=%ld\n", (long)lim.rlim_cur, (long)lim.rlim_max);
+}
+//======================================================================
+void print_config()
+{
+    print_limits();
+
+    printf(     "   Server               : %s\n"
+                "   ServerAddr           : %s\n"
+                "   ServerPort           : %s\n\n"
+
+                "   ListenBacklog        : %d\n"
+                "   tcp_cork             : %c\n"
+                "   TcpNoDelay           : %c\n\n"
+
+                "   SendFile             : %c\n"
+                "   SndBufSize           : %d\n\n"
+
+                "   ConnectionsQueueSize : %d\n"
+                "   MaxWorkConnect       : %d\n"
+                "   MaxEventConnect      : %d\n\n"
+
+                "   NumChld              : %d\n"
+                "   MaxThreads           : %d\n"
+                "   MimThreads           : %d\n"
+                "   MaxProcCgi           : %d\n\n"
+
+                "   MaxRequestsPerClient : %d\n"
+                "   TimeoutKeepAlive     : %d\n"
+                "   Timeout              : %d\n"
+                "   TimeOutCGI           : %d\n"
+                "   TimeoutPoll          : %d\n\n"
+
+                "   MaxRanges            : %d\n\n"
+
+                "   ShowMediaFiles       : %c\n"
+                "   ClientMaxBodySize    : %ld\n\n"
+
+                "   index.html           : %c\n"
+                "   index.php            : %c\n"
+                "   index.pl             : %c\n"
+                "   index.fcgi           : %c\n\n"
+
+                "   UsePHP               : %s\n"
+                "   PathPHP              : %s\n\n",
+                conf->ServerSoftware, conf->ServerAddr, conf->ServerPort, conf->ListenBacklog, conf->tcp_cork, 
+                conf->tcp_nodelay, conf->SendFile, conf->SndBufSize, conf->ConnectionsQueueSize, conf->MaxWorkConnect,  
+                conf->MaxEventConnect, conf->NumProc, conf->MaxThreads, conf->MinThreads, conf->MaxProcCgi,  
+                conf->MaxRequestsPerClient, conf->TimeoutKeepAlive, conf->Timeout, conf->TimeoutCGI, conf->TimeoutPoll, 
+                conf->MaxRanges, conf->ShowMediaFiles, conf->ClientMaxBodySize, conf->index_html, 
+                conf->index_php, conf->index_pl, conf->index_fcgi, conf->UsePHP, conf->PathPHP);
+    printf("   %s;\n   %s\n\n", conf->DocumentRoot, conf->ScriptPath);
+    
+    fcgi_list_addr *i = conf->fcgi_list;
+    printf("   ------------- FastCGI -------------\n");
+    for ( ; i; i = i->next)
+    {
+        printf("   [%s] : [%s]\n", i->scrpt_name, i->addr);
+    }
 }
 //======================================================================
 int main(int argc, char *argv[])
@@ -137,10 +208,10 @@ int main(int argc, char *argv[])
         snprintf(conf_dir, sizeof(conf_dir), "%s", "./server.conf");
     else
     {
-        int c;
+        int c, arg_print = 0;
         pid_t pid_ = 0;
         char *sig = NULL, *conf_dir_ = NULL;
-        while ((c = getopt(argc, argv, "c:s:h")) != -1)
+        while ((c = getopt(argc, argv, "c:s:h:p")) != -1)
         {
             switch (c)
             {
@@ -152,10 +223,13 @@ int main(int argc, char *argv[])
                     break;
                 case 'h':
                     print_help(argv[0]);
-                    exit(0);
+                    return 0;
+                case 'p':
+                    arg_print = 1;
+                    break;
                 default:
                     print_help(argv[0]);
-                    exit(0);
+                    return 0;
             }
         }
 
@@ -164,17 +238,25 @@ int main(int argc, char *argv[])
         else
             snprintf(conf_dir, sizeof(conf_dir), "%s", "./server.conf");
 
+        if (arg_print)
+        {
+            if (read_conf_file(conf_dir))
+                return 1;
+            print_config();
+            return 0;
+        }
+
         if (sig)
         {
             if (read_conf_file(conf_dir))
-                exit(1);
-            
+                return 1;
+
             snprintf(pidFile, sizeof(pidFile), "%s/pid.txt", conf->PidFilePath);
             FILE *fpid = fopen(pidFile, "r");
             if (!fpid)
             {
                 fprintf(stderr, "<%s:%d> Error open PidFile(%s): %s\n", __func__, __LINE__, pidFile, strerror(errno));
-                exit(1);
+                return 1;
             }
 
             fscanf(fpid, "%u", &pid_);
@@ -189,60 +271,74 @@ int main(int argc, char *argv[])
             {
                 fprintf(stderr, "<%d> ? option -s: %s\n", __LINE__, sig);
                 print_help(argv[0]);
-                exit(1);
+                return 1;
             }
 
             snprintf(name_sig_sock, sizeof(name_sig_sock), "/tmp/server_sock_sig_%d", pid_);
             int sock = unixConnect(name_sig_sock, SOCK_DGRAM);
             if (sock < 0)
-                exit(1);
+                return 1;
 
             if (write(sock, &data, sizeof(data)) < 0)
             {
                 fprintf(stderr, "<%d> Error write(): %s\n", __LINE__, strerror(errno));
                 close(sock);
-                exit(1);
+                return 1;
             }
 
             close(sock);
-            exit(0);
+            return 0;
         }
     }
 
-    while (run)
+    while (restart)
     {
+        restart = 0;
+
         if (read_conf_file(conf_dir))
-            return -1;
+            return 1;
 
         snprintf(pidFile, sizeof(pidFile), "%s/pid.txt", conf->PidFilePath);
         FILE *fpid = fopen(pidFile, "w");
         if (!fpid)
         {
-            fprintf(stderr, "<%s:%d> Error open PidFile(%s): %s\n", __func__, __LINE__, pidFile, strerror(errno));
+            fprintf(stderr, "<%s:%d> Error open PidFile(%s): %s, [%s]\n", __func__, __LINE__, pidFile, strerror(errno), conf->PidFilePath);
             return -1;
         }
 
         fprintf(fpid, "%u\n", getpid());
         fclose(fpid);
 
+        sockServer = create_server_socket(conf);
+        if (sockServer == -1)
+        {
+            fprintf(stderr, "<%s:%d> Error: create_server_socket(%s:%s)\n", __func__, __LINE__, conf->ServerAddr, conf->ServerPort);
+            return 1;
+        }
+
         if (start == 0)
         {
-            sockServer = create_server_socket(conf);
-            if (sockServer == -1)
+            start = 1;
+            set_uid();
+
+            if (signal(SIGSEGV, sig_handler) == SIG_ERR)
             {
-                fprintf(stderr, "<%s:%d> Error: create_server_socket(%s:%s)\n", __func__, __LINE__, conf->ServerAddr, conf->ServerPort);
-                exit(1);
+                fprintf (stderr, "   Error signal(SIGSEGV): %s\n", strerror(errno));
+                return 1;
+            }
+
+            if (signal(SIGINT, sig_handler) == SIG_ERR)
+            {
+                fprintf (stderr, "   Error signal(SIGINT): %s\n", strerror(errno));
+                return 1;
             }
 
             snprintf(name_sig_sock, sizeof(name_sig_sock), "/tmp/server_sock_sig_%d", getpid());
             sock_sig = unixBind(name_sig_sock, SOCK_DGRAM);
             if (sock_sig < 0)
             {
-                exit(1);
+                return 1;
             }
-
-            set_uid();
-            start = 1;
         }
 
         if (main_proc())
@@ -254,65 +350,8 @@ int main(int argc, char *argv[])
 //======================================================================
 int main_proc()
 {
-    char s[256];
-
     create_logfiles(conf->LogPath, conf->ServerSoftware);
     //------------------------------------------------------------------
-    pid_t pid = getpid();
-
-    get_time(s, 64);
-    printf(     " [%s] - server \"%s\" run\n"
-                "   ip = %s\n"
-                "   port = %s\n\n"
-
-                "   ListenBacklog = %d\n"
-                "   tcp_cork = %c\n"
-                "   TcpNoDelay = %c\n\n"
-
-                "   SendFile = %c\n"
-                "   SndBufSize = %d\n\n"
-
-                "   ConnectionsQueueSize = %d\n"
-                "   MaxWorkConnect = %d\n"
-                "   MaxEventConnect = %d\n\n"
-
-                "   NumChld = %d\n"
-                "   MaxThreads = %d\n"
-                "   MimThreads = %d\n"
-                "   MaxProcCgi = %d\n\n"
-
-                "   MaxRequestsPerClient %d\n"
-                "   TimeoutKeepAlive = %d\n"
-                "   Timeout = %d\n"
-                "   TimeOutCGI = %d\n"
-                "   TimeoutPoll = %d\n\n"
-
-                "   MaxRanges = %d\n\n"
-
-                "   php: %s\n"
-                "   path_php: %s\n\n"
-
-                "   ShowMediaFiles = %c\n"
-                "   ClientMaxBodySize = %ld\n\n"
-
-                "   index.html = %c\n"
-                "   index.php = %c\n"
-                "   index.pl = %c\n"
-                "   index.fcgi = %c\n",
-                s, conf->ServerSoftware, conf->ServerAddr, conf->ServerPort, conf->ListenBacklog, conf->tcp_cork, 
-                conf->tcp_nodelay, conf->SendFile, conf->SndBufSize, conf->ConnectionsQueueSize, conf->MaxWorkConnect,  
-                conf->MaxEventConnect, conf->NumProc, conf->MaxThreads, conf->MinThreads, conf->MaxProcCgi,  
-                conf->MaxRequestsPerClient, conf->TimeoutKeepAlive, conf->Timeout, conf->TimeoutCGI, conf->TimeoutPoll, 
-                conf->MaxRanges, conf->UsePHP, conf->PathPHP, conf->ShowMediaFiles, conf->ClientMaxBodySize, 
-                conf->index_html, conf->index_php, conf->index_pl, conf->index_fcgi);
-    printf("   %s;\n   %s\n\n", conf->DocumentRoot, conf->ScriptPath);
-
-    fcgi_list_addr *i = conf->fcgi_list;
-    for ( ; i; i = i->next)
-    {
-        fprintf(stdout, "   [%s] : [%s]\n", i->scrpt_name, i->addr);
-    }
-
     for ( ; environ[0]; )
     {
         char *p, buf[512];
@@ -324,20 +363,13 @@ int main_proc()
     }
 
     create_proc(conf->NumProc);
+
+    char s[256];
+    get_time(s, 64);
+    printf(" [%s] - server \"%s\" run\n", s, conf->ServerSoftware);
+    pid_t pid = getpid();
     fprintf(stdout, "   pid=%u, uid=%u, gid=%u\n", pid, getuid(), getgid());
     fprintf(stderr, "   pid=%u, uid=%u, gid=%u\n", pid, getuid(), getgid());
-
-    if (signal(SIGSEGV, sig_handler) == SIG_ERR)
-    {
-        fprintf (stderr, "   Error signal(SIGSEGV): %s\n", strerror(errno));
-        exit (EXIT_FAILURE);
-    }
-
-    if (signal(SIGINT, sig_handler) == SIG_ERR)
-    {
-        fprintf (stderr, "   Error signal(SIGINT): %s\n", strerror(errno));
-        exit (EXIT_FAILURE);
-    }
     //------------------------------------------------------------------
     for (int i = 0; i < conf->NumProc; ++i)
         numConn[i] = 0;
@@ -366,22 +398,14 @@ int main_proc()
 
     int num_fdrd = 3;
 
-    while (run)
+    while (1)
     {
         if (received_sig)
         {
             if (all_conn == 0)
             {
                 if (received_sig == RESTART_SIG_)
-                    run = 1;
-                else if (received_sig == CLOSE_SIG_)
-                    run = 0;
-                else
-                {
-                    fprintf(stderr, "<%s:%d> Error: received_sig=%d\n", __func__, __LINE__, received_sig);
-                    run = 1;
-                }
-
+                    restart = 1;
                 received_sig = 0;
                 break;
             }
@@ -403,12 +427,11 @@ int main_proc()
             if (ret <= 0)
             {
                 print_err("<%s:%d> Error read()=%d: %s\n", __func__, __LINE__, ret, strerror(errno));
-                run = 0;
                 break;
             }
 
             set_arr_conn(ret, s);
-            all_conn  -= ret;
+            all_conn -= ret;
             ret_poll--;
         }
 
@@ -418,7 +441,6 @@ int main_proc()
             if (ret <= 0)
             {
                 print_err("<%s:%d> Error read()=%d: %s\n", __func__, __LINE__, ret, strerror(errno));
-                run = 0;
                 break;
             }
             ret_poll--;
@@ -432,7 +454,6 @@ int main_proc()
                 if (clientSock == -1)
                 {
                     print_err("<%s:%d> Error accept()=-1: %s\n", __func__, __LINE__, strerror(errno));
-                    run = 0;
                     break;
                 }
                 all_conn++;
@@ -445,10 +466,13 @@ int main_proc()
         {
             print_err("<%s:%d> fdrd[0].revents=0x%02x; fdrd[1].revents=0x%02x; ret=%d\n", __func__, __LINE__, 
                             fdrd[0].revents, fdrd[1].revents, ret_poll);
-            run = 0;
+            restart = 0;
             break;
         }
     }
+
+    shutdown(sockServer, SHUT_RDWR);
+    close(sockServer);
 
     for (int i = 0; i < conf->NumProc; ++i)
     {
@@ -465,17 +489,13 @@ int main_proc()
         close(unixFD[i]);
     }
 
-    if (run == 0)
+    while ((pid = wait(NULL)) != -1)
     {
-        shutdown(sockServer, SHUT_RDWR);
-        close(sockServer);
-        remove(pidFile);
-        close(sock_sig);
-        remove(name_sig_sock);
+        print_err("<> wait() pid: %d\n", pid);
     }
-    
+
     close(from_chld[0]);
-    
+
     thread_queue_close();
     pthread_join(thr_send_sock, NULL);
 
@@ -484,16 +504,21 @@ int main_proc()
         fprintf(stderr, "<%d> wait() pid: %d\n", __LINE__, pid);
     }
 
-    free_fcgi_list();
-    if (run)
-        fprintf(stderr, "<%s> ***** Reload, All connect: %u *****\n", __func__, all_conn);
-    else
+    if (restart == 0)
+    {
+        remove(pidFile);
+        close(sock_sig);
+        remove(name_sig_sock);
         fprintf(stderr, "<%s> ***** Close, All connect: %u *****\n", __func__, all_conn);
+    }
+    else
+        fprintf(stderr, "<%s> ***** Reload, All connect: %u *****\n", __func__, all_conn);
+
+    free_fcgi_list();
+
     close_logs();
     return 0;
 }
-//======================================================================
-void manager(int sock, int num, int);
 //======================================================================
 pid_t create_child(int num_chld, int *from_chld)
 {

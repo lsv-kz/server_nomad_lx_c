@@ -268,6 +268,8 @@ static void sig_handler(int sig)
         print_err("[%d] <%s:%d> ### SIGSEGV ###\n", nProc, __func__, __LINE__);
         exit(1);
     }
+    else
+        print_err("[%d] <%s:%d> ### sig=%d ###\n", nProc, __func__, __LINE__, sig);
 }
 //======================================================================
 int manager(int sockServer, int numProc, int to_parent)
@@ -432,6 +434,8 @@ int manager(int sockServer, int numProc, int to_parent)
 
     close_event_handler();
     pthread_join(thr_handler, NULL);
+    
+    print_err("[%d] all requests: %d, num thr: %d\n", nProc, all_req, num_wait_thr);
 
     free_fcgi_list();
     sleep(1);

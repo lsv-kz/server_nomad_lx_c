@@ -100,15 +100,15 @@ int strlcmp_case(const char *s1, const char *s2, int len)
 //======================================================================
 int get_int_method(char *s)
 {
-    if (!memcmp(s, (char*)"GET", 3))
+    if (!memcmp(s, "GET", 3))
         return M_GET;
-    else if (!memcmp(s, (char*)"POST", 4))
+    else if (!memcmp(s, "POST", 4))
         return M_POST;
-    else if (!memcmp(s, (char*)"HEAD", 4))
+    else if (!memcmp(s, "HEAD", 4))
         return M_HEAD;
-    else if (!memcmp(s, (char*)"OPTIONS", 7))
+    else if (!memcmp(s, "OPTIONS", 7))
         return M_OPTIONS;
-    else if (!memcmp(s, (char*)"CONNECT", 7))
+    else if (!memcmp(s, "CONNECT", 7))
         return M_CONNECT;
     else
         return 0;
@@ -117,27 +117,27 @@ int get_int_method(char *s)
 const char *get_str_method(int i)
 {
     if (i == M_GET)
-        return (char*)"GET";
+        return "GET";
     else if (i == M_POST)
-        return (char*)"POST";
+        return "POST";
     else if (i == M_HEAD)
-        return (char*)"HEAD";
+        return "HEAD";
     else if (i == M_OPTIONS)
-        return (char*)"OPTIONS";
+        return "OPTIONS";
     else if (i == M_CONNECT)
-        return (char*)"CONNECT";
-    return (char*)"";
+        return "CONNECT";
+    return "?";
 }
 //======================================================================
 int get_int_http_prot(char *s)
 {
-    if (!memcmp(s, (char*)"HTTP/1.1", 8))
+    if (!memcmp(s, "HTTP/1.1", 8))
         return HTTP11;
-    else if (!memcmp(s, (char*)"HTTP/1.0", 8))
+    else if (!memcmp(s, "HTTP/1.0", 8))
         return HTTP10;
-    else if (!memcmp(s, (char*)"HTTP/0.9", 8))
+    else if (!memcmp(s, "HTTP/0.9", 8))
         return HTTP09;
-    else if (!memcmp(s, (char*)"HTTP/2", 6))
+    else if (!memcmp(s, "HTTP/2", 6))
         return HTTP2;
     else
         return 0;
@@ -147,14 +147,14 @@ const char *get_str_http_prot(int i)
 {
 
     if (i == HTTP11)
-        return (char*)"HTTP/1.1";
+        return "HTTP/1.1";
     else if (i == HTTP10)
-            return (char*)"HTTP/1.0";
+            return "HTTP/1.0";
     else if (i == HTTP09)
-            return (char*)"HTTP/0.9";
+            return "HTTP/0.9";
     else if (i == HTTP2)
-            return (char*)"HTTP/2";
-    return (char*)"HTTP/1.1";
+            return "HTTP/2";
+    return "";
 }
 //======================================================================
 char *strstr_lowercase(char * s1, char *s2)

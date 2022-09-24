@@ -146,6 +146,10 @@ void create_html(Connect *req, String *s, const char *msg)
 void send_message(Connect *req, String *hdrs, const char *msg)
 {
     req->respContentType = "text/html";
+
+    if (req->httpProt == 0)
+        req->httpProt = HTTP11;
+
     if(req->respStatus == RS204)
     {
         req->respContentLength = 0;

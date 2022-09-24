@@ -308,7 +308,11 @@ int send_file_ux(int fd_out, int fd_in, char *buf, int *size, off_t offset, long
 //======================================================================
 int hd_read(Connect *req)
 {
-    int n = recv(req->clientSocket, req->bufReq + req->i_bufReq, LEN_BUF_REQUEST - req->i_bufReq - 1, 0);
+    int len = LEN_BUF_REQUEST - req->i_bufReq - 1;
+    if (len <= 0)
+        return -RS414;
+
+    int n = recv(req->clientSocket, req->bufReq + req->i_bufReq, len, 0);
     if (n < 0)
     {
         if (errno == EAGAIN)

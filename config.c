@@ -43,57 +43,56 @@ void create_conf_file()
         exit(1);
     }
 
-    fprintf(f, "ServerAddr   %s\n", "0.0.0.0");
-    fprintf(f, "ServerPort    ? \n");
     fprintf(f, "ServerSoftware   ? \n");
+    fprintf(f, "ServerAddr       0.0.0.0\n");
+    fprintf(f, "ServerPort       8080\n\n");
 
-    fprintf(f, "DocumentRoot ?\n");
-    fprintf(f, "ScriptPath   ?\n");
-    fprintf(f, "LogPath      ?\n");
-    fprintf(f, "PidFilePath      ?\n\n");
+    fprintf(f, "DocumentRoot www/html\n");
+    fprintf(f, "ScriptPath   www/cgi\n");
+    fprintf(f, "LogPath      www/logs\n");
+    fprintf(f, "PidFilePath  www/pid\n\n");
 
     fprintf(f, "ListenBacklog 128\n");
     fprintf(f, "tcp_cork   n \n");
     fprintf(f, "tcp_nodelay   y \n\n");
 
-    fprintf(f, "SendFile   n \n");
-    fprintf(f, "SndBufSize   32768\n\n");
+    fprintf(f, "SendFile    y\n");
+    fprintf(f, "SndBufSize  32768\n\n");
 
     fprintf(f, "ConnectionsQueueSize 1024\n");
-    fprintf(f, "MaxWorkConnect 512\n");
-    fprintf(f, "MaxEventConnect   100\n\n");
+    fprintf(f, "MaxWorkConnect       768\n");
+    fprintf(f, "MaxEventConnect      100\n\n");
 
-    fprintf(f, "NumProc 4\n");
+    fprintf(f, "NumProc    4\n");
     fprintf(f, "MaxThreads 256\n");
     fprintf(f, "MinThreads 6\n");
     fprintf(f, "MaxProcCgi 30\n\n");
     
     fprintf(f, "MaxRequestsPerClient 100\n");
-    fprintf(f, "TimeoutKeepAlive 30\n");
-    fprintf(f, "Timeout    60\n");
-    fprintf(f, "TimeoutCGI 10\n");
-    fprintf(f, "TimeoutPoll 10\n\n");
+    fprintf(f, "TimeoutKeepAlive     30\n");
+    fprintf(f, "Timeout              60\n");
+    fprintf(f, "TimeoutCGI           10\n");
+    fprintf(f, "TimeoutPoll          100  # [ms]\n\n");
 
-    fprintf(f, "MaxRanges 0\n\n");
+    fprintf(f, "MaxRanges    5\n\n");
 
-    fprintf(f, "ClientMaxBodySize 5000000\n\n");
+    fprintf(f, "ClientMaxBodySize 50000000\n\n");
 
-    fprintf(f, "UsePHP     n\n");
-    fprintf(f, "# UsePHP   /usr/bin/php-cgi\n");
-    fprintf(f, "# PathPHP  127.0.0.1:9000  #  /run/php/php7.0-fpm.sock\n\n");
+    fprintf(f, "UsePHP     n  # [n, php-fpm, php-cgi] \n");
+    fprintf(f, "# PathPHP  127.0.0.1:9000  #  [php-fpm: 127.0.0.1:9000 (/var/run/php-fpm.sock), php-cgi: /usr/bin/php-cgi]\n\n");
 
     fprintf(f, "index {\n"
                 "\t#index.html\n"
                 "}\n\n");
 
     fprintf(f, "fastcgi {\n"
-                "\t#/test  127.0.0.1:9009\n"
-                "}\n\n");
+                "\t ~/test  127.0.0.1:9004\n"
+                " ~env      127.0.0.1:9002}\n\n");
 
-    fprintf(f, "ShowMediaFiles n\n\n");
+    fprintf(f, "ShowMediaFiles N \n\n");
 
-    fprintf(f, "User nobody     # www-data\n");
-    fprintf(f, "Group nogroup   # www-data\n\n");
+    fprintf(f, "User  root\n");
+    fprintf(f, "Group www-data\n\n");
 
     fclose(f);
 }
