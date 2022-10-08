@@ -41,7 +41,7 @@
 
 #define    MAX_PATH           4096
 #define    MAX_NAME            256
-#define    LEN_BUF_REQUEST    8192
+#define    SIZE_BUF_REQUEST    8192
 #define    MAX_HEADERS          25
 #define    NO_PRINT_LOG      -1000
 
@@ -173,10 +173,10 @@ typedef struct Connect{
     int  err;
     char remoteAddr[64];
 
-    char bufReq[LEN_BUF_REQUEST]; 
-
-    int  i_bufReq;
+    char bufReq[SIZE_BUF_REQUEST]; 
+    int  lenBufReq;
     char *p_newline;
+    
     char *tail;
     int  lenTail;
 
@@ -185,7 +185,7 @@ typedef struct Connect{
     char *uri;
     unsigned int uriLen;
 
-    char decodeUri[LEN_BUF_REQUEST];
+    char decodeUri[SIZE_BUF_REQUEST];
     unsigned int lenDecodeUri;
     //------------------------------------------------------------------
     char *sReqParam;

@@ -707,113 +707,113 @@ const char *str_err(int i)
     {
         case 0:
             return "Success";
-        case EPERM: // 1
+        case EPERM:
             return "Operation not permitted";
-        case ENOENT: // 2
+        case ENOENT:
             return "No such file or directory";
-        case EINTR: // 4
+        case EINTR:
             return "Interrupted system call";
-        case EIO: // 5
+        case EIO:
             return "I/O error";
-        case ENXIO: // 6
+        case ENXIO:
             return "No such device or address";
-        case E2BIG: // 7
+        case E2BIG:
             return "Argument list too long";
-        case ENOEXEC: // 8
+        case ENOEXEC:
             return "Exec format error";
-        case EBADF: // 9
+        case EBADF:
             return "Bad file descriptor";
-        case ECHILD: // 10
+        case ECHILD:
             return "No child processes";
-        case EAGAIN: // 11
+        case EAGAIN:
             return "Try again"; // "Resource temporarily unavailable"
-        case ENOMEM: // 12
+        case ENOMEM:
             return "Out of memory";
-        case EACCES: // 13
+        case EACCES:
             return "Permission denied";
-        case EFAULT: // 14
+        case EFAULT:
             return "Bad address";
-        case ENOTBLK: // 15
+        case ENOTBLK:
             return "Block device required";
-        case EBUSY: // 16
+        case EBUSY:
             return "Device or resource busy";
-        case EEXIST: // 17
+        case EEXIST:
             return "File exists";
-        case EXDEV: // 18
+        case EXDEV:
             return "Cross-device link";
-        case ENODEV: // 19
+        case ENODEV:
             return "No such device";
-        case ENOTDIR: // 20
+        case ENOTDIR:
             return "Not a directory";
-        case EISDIR: // 21
+        case EISDIR:
             return "Is a directory";
-        case EINVAL: // 22
+        case EINVAL:
             return "Invalid argument";
-        case ENFILE: // 23
+        case ENFILE:
             return "File table overflow";
-        case EMFILE: // 24
+        case EMFILE:
             return "Too many open files";
-        case ENOTTY: // 25
+        case ENOTTY:
             return "Not a typewriter";
-        case ETXTBSY: // 26
+        case ETXTBSY:
             return "Text file busy";
-        case EFBIG: // 27
+        case EFBIG:
             return "File too large";
-        case ENOSPC: // 28
+        case ENOSPC:
             return "No space left on device";
-        case ESPIPE: // 29
+        case ESPIPE:
             return "Illegal seek";
-        case EROFS: // 30
+        case EROFS:
             return "Read-only file system";
-        case EMLINK: // 31
+        case EMLINK:
             return "Too many links";
-        case EPIPE: // 32
+        case EPIPE:
             return "Broken pipe";
-        case ENAMETOOLONG: // 36
+        case ENAMETOOLONG:
             return "File name too long";
-        case ECONNABORTED: // 53 Ctrl+C OpenBSD 
+        case ECONNABORTED:
             return "Software caused connection abort";
-        case EILSEQ: // 84
+        case EILSEQ:
             return "Illegal byte sequence";
-        case ENOTSOCK: // 88
+        case ENOTSOCK:
             return "Socket operation on non-socket";
-        case EDESTADDRREQ: // 89
+        case EDESTADDRREQ:
             return "Destination address required";
-        case EMSGSIZE: // 90
+        case EMSGSIZE:
             return "Message too long";
-        case EPROTOTYPE: // 91
+        case EPROTOTYPE:
             return "Protocol wrong type for socket";
-        case ENOPROTOOPT: // 92
+        case ENOPROTOOPT:
             return "Protocol not available";
-        case EPROTONOSUPPORT: // 93
+        case EPROTONOSUPPORT:
             return "Protocol not supported";
-        case ESOCKTNOSUPPORT: // 94
+        case ESOCKTNOSUPPORT:
             return "Socket type not supported";
-        case EOPNOTSUPP: // 95
+        case EOPNOTSUPP:
             return "Operation not supported on transport endpoint";
-        case EPFNOSUPPORT: // 96
+        case EPFNOSUPPORT:
             return "Protocol family not supported";
-        case EAFNOSUPPORT: // 97
+        case EAFNOSUPPORT:
             return "Address family not supported by protocol";
-        case EADDRINUSE: // 98
+        case EADDRINUSE:
             return "Address already in use";
-        case EADDRNOTAVAIL: // 99
+        case EADDRNOTAVAIL:
             return "Cannot assign requested address";
-        case ENETDOWN: // 100
+        case ENETDOWN:
             return "Network is down";
-        case ENETUNREACH: // 101
+        case ENETUNREACH:
             return "Network is unreachable";
-        case ECONNRESET: // 104
+        case ECONNRESET:
             return "Connection reset by peer";
-        case ENOBUFS: // 105
+        case ENOBUFS:
             return "No buffer space available";
-        case ENOTCONN: // 107
+        case ENOTCONN:
             return "Transport endpoint is not connected";
-        case ETIMEDOUT: //OpenBSD=60; Debian=110
+        case ETIMEDOUT:
             return "Connection timed out";
-        case ECONNREFUSED: // 111
+        case ECONNREFUSED:
             return "Connection refused";
-        case EINPROGRESS: // 115
+        case EINPROGRESS:
             return "Operation now in progress";
         
         default:

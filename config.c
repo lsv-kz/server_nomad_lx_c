@@ -20,14 +20,14 @@ int check_path(char *path, int size)
         return -1;
     }
 
-    char path_[PATH_MAX] = "";
-    if (!realpath(path, path_))
+    char path_new[PATH_MAX] = "";
+    if (!realpath(path, path_new))
     {
         fprintf(stderr, "<%s:%d> Error realpath(): %s\n", __func__, __LINE__, strerror(errno));
         return -1;
     }
 
-    snprintf(path, size, "%s", path_);
+    snprintf(path, size, "%s", path_new);
 
     return 0;
 }
@@ -657,14 +657,21 @@ int read_conf_file(const char *path_conf)
     FILE *f = fopen(path_conf, "r");
     if (!f)
     {
-        int errno_ = errno;
-        fprintf(stderr, "<%s:%d> Error fopen(%s): %s\n", __func__, __LINE__, path_conf, strerror(errno_));
         if (errno == ENOENT)
         {
-            create_conf_file();
-            fprintf(stderr, " Correct config file\n");
+            char s[8];
+            printf("Create config file? [y/n]: ");
+            fflush(stdout);
+            fgets(s, sizeof(s), stdout);
+            if (s[0] == 'y')
+            {
+                create_conf_file();
+                fprintf(stderr, " Correct config file\n");
+            }
         }
-        exit(1);
+        else
+            fprintf(stderr, "<%s:%d> Error fopen(%s): %s\n", __func__, __LINE__, path_conf, strerror(errno));
+        return -1;
     }
 
     int n;

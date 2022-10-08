@@ -166,7 +166,7 @@ pthread_mutex_unlock(&mtx_);
         
         if (((t - r->sock_timer) >= r->timeout) && (r->sock_timer != 0))
         {
-            if (r->reqMethod)
+            if (r->lenBufReq)
             {
                 r->err = -1;
                 print__err(r, "<%s:%d> Timeout = %ld\n", __func__, __LINE__, t - r->sock_timer);
@@ -428,7 +428,7 @@ void init_struct_request(Connect *req)
     req->sReqParam = NULL;
     req->reqHeadersName[0] = NULL;
     req->reqHeadersValue[0] = NULL;
-    req->i_bufReq = 0;
+    req->lenBufReq = 0;
     req->lenTail = 0;
     req->sizePath = 0;
     req->reqMethod = 0;

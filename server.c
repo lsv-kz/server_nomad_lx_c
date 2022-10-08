@@ -644,13 +644,13 @@ void timedwait_close_connect()
 pthread_mutex_lock(&mtx_sock);
     struct timeval now;
     struct timespec ts;
-    
+
     gettimeofday(&now, NULL);
     ts.tv_sec = now.tv_sec;
     ts.tv_nsec = (now.tv_usec + 1000) * 1000;
-    
+
     pthread_cond_timedwait(&cond_close_conn, &mtx_sock, &ts);
-    
+
 pthread_mutex_unlock(&mtx_sock);
 }
 //----------------------------------------------------------------------
@@ -669,7 +669,7 @@ void *thread_send_socket(void *arg)
                 break;
         }
         sock = buf_queue_sock[i_pop];
-        
+
         for ( i = 0; thr_close == 0; )
         {
             if (numConn[i] < conf->MaxWorkConnect)
@@ -684,7 +684,7 @@ void *thread_send_socket(void *arg)
             }
         }
     pthread_mutex_unlock(&mtx_sock);
- 
+
         if (thr_close)
         {
             free(buf_queue_sock);
@@ -706,7 +706,7 @@ void *thread_send_socket(void *arg)
         }
 
         close(sock);
-        
+
     pthread_mutex_lock(&mtx_sock);
         numConn[i]++;
         size_qu--;
