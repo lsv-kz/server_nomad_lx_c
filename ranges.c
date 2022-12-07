@@ -26,7 +26,7 @@ int check_ranges(Connect *req)
             }
         }
     }
-    
+
     for (int i = 0, j = 0; j < Len; j++)
     {
         if (r[j].len)
@@ -38,11 +38,11 @@ int check_ranges(Connect *req)
                 r[i].len = r[j].len;
                 r[j].len = 0;
             }
-            
+
             i++;
         }
     }
-    
+
     return req->numPart;
 }
 //======================================================================
@@ -52,11 +52,11 @@ int parse_ranges(Connect *req, int Len)
     int i = 0;
     const char *p1;
     char *p2;
-    
+
     req->numPart = 0;
-    
+
     p1 = p2 = req->sRange;
-    
+
     for ( ; req->numPart < Len; )
     {
         if ((*p1 >= '0') && (*p1 <= '9'))
@@ -73,7 +73,7 @@ int parse_ranges(Connect *req, int Len)
                     fprintf(stderr, "<%s:%d> \"416 Requested Range Not Satisfiable\"\n", __func__, __LINE__);
                     return -416;
                 }
-                            
+
                 i++;
                 p1 = p2;
             }
@@ -121,7 +121,7 @@ int parse_ranges(Connect *req, int Len)
 
             if (end >= size)
                 end = size - 1;
-            
+
             if (start <= end)
             {
                 req->rangeBytes[req->numPart++] = (Range){start, end, end - start + 1};
@@ -140,39 +140,34 @@ int parse_ranges(Connect *req, int Len)
             return -416;
         }
     }
-    
+
     return req->numPart;
 }
 //======================================================================
 int get_ranges(Connect *req)
 {
     int SizeArray = 0;
-    
+
     if (!req->sRange)
-    {
         return -RS500;
-    }
-    
+
     if (conf->MaxRanges == 0)
-    {
         return -RS403;
-    }
-    
+
     for ( char *p = req->sRange; *p; ++p)
     {
         if (*p == ',')
             SizeArray++;
     }
-    
+
     SizeArray++;
     if (SizeArray > conf->MaxRanges)
         SizeArray = conf->MaxRanges;
+
     req->rangeBytes = malloc(sizeof(Range) * SizeArray);
     if (!req->rangeBytes)
-    {
         return -RS500;
-    }
-    
+
     int n = parse_ranges(req, SizeArray);
     //if (n > 1)
     //    return (n = check_ranges(req));

@@ -108,7 +108,7 @@ void str_cat(String *s, const char *cs)
         if (s->err)
             return;
     }
-    
+
     memcpy(s->ptr + s->len, cs, len);
     s->len += len;
 }
@@ -121,7 +121,7 @@ void str_cat_ln(String *s, const char *cs)
         str_cat(s, "\r\n");
         return;
     }
-    
+
     unsigned int len = strlen(cs);
     if (len == 0)
         return;
@@ -131,7 +131,7 @@ void str_cat_ln(String *s, const char *cs)
         if (s->err)
             return;
     }
-    
+
     memcpy(s->ptr + s->len, cs, len);
     s->len += len;
     memcpy(s->ptr + s->len, "\r\n", 2);
@@ -148,7 +148,7 @@ void str_n_cat(String *s, const char *cs, unsigned int len)
         if (s->err)
             return;
     }
-    
+
     memcpy(s->ptr + s->len, cs, len);
     s->len += len;
 }
@@ -180,10 +180,4 @@ int str_len(String *s)
 {
     if (!s || s->err) return 0;
     return s->len;
-}
-//======================================================================
-int str_size(String *s)
-{
-    if (!s || s->err) return 0;
-    return s->size;
 }

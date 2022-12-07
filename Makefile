@@ -35,7 +35,7 @@ $(OBJSDIR)/server.o: server.c server.h
 $(OBJSDIR)/string.o: string.c server.h
 	$(CC) $(CFLAGS) -c string.c -o $@
 
-$(OBJSDIR)/config.o: config.c server.h 
+$(OBJSDIR)/config.o: config.c server.h
 	$(CC) $(CFLAGS) -c config.c -o $@
 
 $(OBJSDIR)/chunk.o: chunk.c server.h
@@ -47,7 +47,7 @@ $(OBJSDIR)/threads_manager.o: threads_manager.c server.h
 $(OBJSDIR)/event_handler.o: event_handler.c server.h
 	$(CC) $(CFLAGS) -c event_handler.c -o $@
 
-$(OBJSDIR)/response.o: response.c server.h 
+$(OBJSDIR)/response.o: response.c server.h
 	$(CC) $(CFLAGS) -c response.c -o $@
 
 $(OBJSDIR)/create_socket.o: create_socket.c server.h
@@ -71,16 +71,16 @@ $(OBJSDIR)/functions.o: functions.c server.h
 $(OBJSDIR)/log.o: log.c server.h
 	$(CC) $(CFLAGS) -c log.c -o $@
 
-$(OBJSDIR)/cgi.o: cgi.c server.h 
+$(OBJSDIR)/cgi.o: cgi.c server.h
 	$(CC) $(CFLAGS) -c cgi.c -o $@
 
-$(OBJSDIR)/fcgi.o: fcgi.c server.h 
+$(OBJSDIR)/fcgi.o: fcgi.c server.h
 	$(CC) $(CFLAGS) -c fcgi.c -o $@
 
-$(OBJSDIR)/index.o: index.c server.h 
+$(OBJSDIR)/index.o: index.c server.h
 	$(CC) $(CFLAGS) -c index.c -o $@
 
 clean:
 	rm -f server
 	rm -f $(OBJSDIR)/*.o
-	rm -f *.o 
+	rm -f *.o

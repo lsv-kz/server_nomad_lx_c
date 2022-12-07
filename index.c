@@ -59,7 +59,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
         chunk = NO_SEND;
     else
         chunk = ((req->httpProt == HTTP11) && req->connKeepAlive) ? SEND_CHUNK : SEND_NO_CHUNK;
-    
+
     chunked chk = {MAX_LEN_SIZE_CHUNK, chunk, 0, req->clientSocket};
 
     req->respStatus = RS200;
@@ -102,8 +102,8 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
         "  <link href=\"/styles.css\" type=\"text/css\" rel=\"stylesheet\">\n"
         " </head>\n"
         " <body id=\"top\">\n"
-        "  <h3>Index of ", 
-        req->decodeUri, 
+        "  <h3>Index of ",
+        req->decodeUri,
         "</h3>\n"
         "  <table cols=\"2\" width=\"100\%\">\n"
         "   <tr><td><h3>Directories</h3></td><td></td></tr>\n");
@@ -188,7 +188,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
         {
             if (size < 8000LL)
             {
-                va_chunk_add_str(&chk, 7, "   <tr><td><a href=\"", buf, "\"><img src=\"", buf, "\"></a><br>", 
+                va_chunk_add_str(&chk, 7, "   <tr><td><a href=\"", buf, "\"><img src=\"", buf, "\"></a><br>",
                                                 list[i], "</td><td align=\"right\">");
                 chunk_add_longlong(&chk, size);
                 va_chunk_add_str(&chk, 1, " bytes</td></tr>\n   <tr><td></td><td></td></tr>\n");
@@ -201,11 +201,11 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
             }
             else
             {
-                va_chunk_add_str(&chk, 7, "   <tr><td><a href=\"", buf, "\"><img src=\"", buf, "\" width=\"300\"></a><br>", 
+                va_chunk_add_str(&chk, 7, "   <tr><td><a href=\"", buf, "\"><img src=\"", buf, "\" width=\"300\"></a><br>",
                                         list[i], "</td><td align=\"right\">");
                 chunk_add_longlong(&chk, size);
                 va_chunk_add_str(&chk, 1, " bytes</td></tr>\n   <tr><td></td><td></td></tr>\n");
-                
+
                 if (chk.err)
                 {
                     print_err("<%s:%d> Error chunk_add_str()\n", __func__, __LINE__);
@@ -215,7 +215,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
         }
         else if (isaudiofile(list[i]) && (conf->ShowMediaFiles == 'y'))
         {
-            va_chunk_add_str(&chk, 7, "   <tr><td><audio preload=\"none\" controls src=\"", buf, 
+            va_chunk_add_str(&chk, 7, "   <tr><td><audio preload=\"none\" controls src=\"", buf,
                                 "\"></audio><a href=\"", buf, "\">", list[i], "</a></td><td align=\"right\">");
             chunk_add_longlong(&chk, size);
             va_chunk_add_str(&chk, 1, " bytes</td></tr>\n");
@@ -230,7 +230,7 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
             va_chunk_add_str(&chk, 5, "   <tr><td><a href=\"", buf, "\">", list[i], "</a></td><td align=\"right\">");
             chunk_add_longlong(&chk, size);
             va_chunk_add_str(&chk, 1, " bytes</td></tr>\n");
-            
+
             if (chk.err)
             {
                 print_err("<%s:%d> Error va_chunk_add_str()\n", __func__, __LINE__);
@@ -239,9 +239,9 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
         }
     }
     //------------------------------------------------------------------
-    va_chunk_add_str(&chk, 3, 
+    va_chunk_add_str(&chk, 3,
             "  </table>\n"
-            "  <hr>\n  ", 
+            "  <hr>\n  ",
             req->sLogTime,
             "\n  <a href=\"#top\" style=\"display:block;\n"
             "         position:fixed;\n"
@@ -297,18 +297,18 @@ int read_dir(Connect *req)
 
     dir = opendir(str_ptr(&req->path));
     if (dir == NULL)
-    {  
+    {
         if (errno == EACCES)
             return -RS403;
         else
         {
-            print__err(req, "<%s:%d> Error opendir(\"%s\"): %s\n", __func__, __LINE__, str_ptr(&req->path), str_err(errno));
+            print__err(req, "<%s:%d> Error opendir(\"%s\"): %s\n", __func__, __LINE__, str_ptr(&req->path), strerror(errno));
             return -RS500;
         }
     }
 
     while ((dirbuf = readdir(dir)))
-    {        
+    {
         if (numFiles >= maxNumFiles )
         {
             print__err(req, "<%s:%d> number of files per directory >= %d\n", __func__, __LINE__, numFiles);

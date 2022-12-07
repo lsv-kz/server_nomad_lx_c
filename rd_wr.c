@@ -50,9 +50,7 @@ int read_timeout(int fd, char *buf, int len, int timeout)
             }
         }
         else if (fdrd.revents & POLLHUP)
-        {
             break;
-        }
         else if (fdrd.revents & POLLERR)
         {
             print_err("<%s:%d> POLLERR fdrd.revents = 0x%02x\n", __func__, __LINE__, fdrd.revents);
@@ -116,49 +114,23 @@ int client_to_script(int fd_in, int fd_out, long long *cont_len, int num_thr)
     int rd, wr;
     char buf[512];
 
-    for( ; *cont_len > 0; )
+    for ( ; *cont_len > 0; )
     {
         rd = read_timeout(fd_in, buf, (*cont_len > sizeof(buf)) ? sizeof(buf) : *cont_len, conf->Timeout);
-        if(rd == -1)
+        if (rd == -1)
         {
             if (errno == EINTR)
                 continue;
             return -1;
         }
-        else if(rd == 0)
+        else if (rd == 0)
             break;
         *cont_len -= rd;
 
         wr = write_timeout(fd_out, buf, rd, conf->TimeoutCGI);
-        if(wr <= 0)
+        if (wr <= 0)
             return wr;
         wr_bytes += wr;
-    }
-
-    return wr_bytes;
-}
-//======================================================================
-long client_to_cosmos(int fd_in, long size)
-{
-    long wr_bytes = 0;
-    long rd;
-    char buf[1024];
-
-    for (; size > 0; )
-    {
-        rd = read_timeout(fd_in, buf, (size > sizeof(buf)) ? sizeof(buf) : size, conf->Timeout);
-        if(rd == -1)
-        {
-            if (errno == EINTR)
-                continue;
-            return -1;
-        }
-        else if(rd == 0)
-            break;
-
-        size -= rd;
-
-        wr_bytes += rd;
     }
 
     return wr_bytes;
@@ -173,13 +145,13 @@ long cgi_to_cosmos(int fd_in, int timeout)
     for (; ; )
     {
         rd = read_timeout(fd_in, buf, sizeof(buf), timeout);
-        if(rd == -1)
+        if (rd == -1)
         {
             if (errno == EINTR)
                 continue;
             return -1;
         }
-        else if(rd == 0)
+        else if (rd == 0)
             break;
         wr_bytes += rd;
     }
@@ -196,15 +168,15 @@ long fcgi_to_cosmos(int fd_in, int size, int timeout)
     for (; size > 0; )
     {
         rd = read_timeout(fd_in, buf, (size > sizeof(buf)) ? sizeof(buf) : size, timeout);
-        if(rd == -1)
+        if (rd == -1)
         {
             if (errno == EINTR)
                 continue;
             return -1;
         }
-        else if(rd == 0)
+        else if (rd == 0)
             break;
-        
+
         size -= rd;
         wr_bytes += rd;
     }
@@ -235,7 +207,7 @@ int fcgi_read_padding(int fd_in, long len, int timeout)
     return 1;
 }
 //======================================================================
-int fcgi_read_stderr(int fd_in, int cont_len, int timeout)
+int fcgi_read_to_stderr(int fd_in, int cont_len, int timeout)
 {
     int wr_bytes = 0;
     int rd;
@@ -272,12 +244,12 @@ int send_file_ux(int fd_out, int fd_in, char *buf, int *size, off_t offset, long
 
     for ( ; *cont_len > 0; )
     {
-        if(*cont_len < *size)
+        if (*cont_len < *size)
             rd = read(fd_in, buf, *cont_len);
         else
             rd = read(fd_in, buf, *size);
 
-        if(rd == -1)
+        if (rd == -1)
         {
             print_err("<%s:%d> Error read(): %s\n", __func__,
                                     __LINE__, strerror(errno));
@@ -286,14 +258,14 @@ int send_file_ux(int fd_out, int fd_in, char *buf, int *size, off_t offset, long
             ret = rd;
             break;
         }
-        else if(rd == 0)
+        else if (rd == 0)
         {
             ret = rd;
             break;
         }
 
         wr = write_timeout(fd_out, buf, rd, conf->Timeout);
-        if(wr <= 0)
+        if (wr <= 0)
         {
             print_err("<%s:%d> Error write_to_sock()=%d\n", __func__, __LINE__, wr);
             ret = -1;
@@ -304,6 +276,86 @@ int send_file_ux(int fd_out, int fd_in, char *buf, int *size, off_t offset, long
     }
 
     return ret;
+}
+//======================================================================
+int find_empty_line(Connect *req)
+{
+    req->timeout = conf->Timeout;
+    char *pCR, *pLF, ch;
+    while (req->lenTail > 0)
+    {
+        int i = 0, len_line = 0;
+        pCR = pLF = NULL;
+        while (i < req->lenTail)
+        {
+            ch = *(req->p_newline + i);
+            if (ch == '\r')// found CR
+            {
+                if (i == (req->lenTail - 1))
+                    return 0;
+                if (pCR)
+                    return -RS400;
+                pCR = req->p_newline + i;
+            }
+            else if (ch == '\n')// found LF
+            {
+                pLF = req->p_newline + i;
+                if ((pCR) && ((pLF - pCR) != 1))
+                    return -RS400;
+                i++;
+                break;
+            }
+            else
+                len_line++;
+            i++;
+        }
+
+        if (pLF) // found end of line '\n'
+        {
+            if (pCR == NULL)
+                *pLF = 0;
+            else
+                *pCR = 0;
+
+            if (len_line == 0) // found empty line
+            {
+                if (req->countReqHeaders == 0) // empty lines before Starting Line
+                {
+                    if ((pLF - req->bufReq + 1) > 4) // more than two empty lines
+                        return -RS400;
+                    req->lenTail -= i;
+                    req->p_newline = pLF + 1;
+                    continue;
+                }
+
+                if (req->lenTail > 0) // tail after empty line (Message Body for POST method)
+                {
+                    req->tail = pLF + 1;
+                    req->lenTail -= i;
+                }
+                else
+                    req->tail = NULL;
+                return 1;
+            }
+
+            if (req->countReqHeaders < MAX_HEADERS)
+            {
+                req->reqHeadersName[req->countReqHeaders] = req->p_newline;
+                req->countReqHeaders++;
+            }
+            else
+                return -RS500;
+
+            req->lenTail -= i;
+            req->p_newline = pLF + 1;
+        }
+        else if (pCR && (!pLF))
+            return -RS400;
+        else
+            break;
+    }
+
+    return 0;
 }
 //======================================================================
 int hd_read(Connect *req)
@@ -327,91 +379,11 @@ int hd_read(Connect *req)
     req->lenBufReq += n;
     req->bufReq[req->lenBufReq] = 0;
 
-    n = empty_line(req);
-    if (n == 1)
-    {
+    n = find_empty_line(req);
+    if (n == 1) // empty line found
         return req->lenBufReq;
-    }
-    else if (n < 0)
+    else if (n < 0) // error
         return n;
-
-    return 0;
-}
-//======================================================================
-int empty_line(Connect *req)
-{
-    req->timeout = conf->Timeout;
-    char *pr, *pn, ch;
-    while (req->lenTail > 0)
-    {
-        int i = 0, len_line = 0;
-        pr = pn = NULL;
-        while (i < req->lenTail)
-        {
-            ch = *(req->p_newline + i);
-            if (ch == '\r')
-            {
-                if (i == (req->lenTail - 1))
-                    return 0;
-                pr = req->p_newline + i;
-            }
-            else if (ch == '\n')
-            {
-                pn = req->p_newline + i;
-                if ((pr) && ((pn - pr) != 1))
-                    return -RS400;
-                i++;
-                break;
-            }
-            else
-                len_line++;
-            i++;
-        }
-
-        if (pn)
-        {
-            if (pr == NULL)
-                *pn = 0;
-            else
-                *pr = 0;
-
-            if (len_line == 0)
-            {
-                if (req->countReqHeaders == 0)
-                {
-                    if ((pn - req->bufReq + 1) > 4)
-                        return -RS400;
-                    req->lenTail -= i;
-                    req->p_newline = pn + 1;
-                    continue;
-                }
-
-                if (req->lenTail > 0)
-                {
-                    req->tail = pn + 1;
-                    req->lenTail -= i;
-                }
-                else 
-                    req->tail = NULL;
-                return 1;
-            }
-
-            if (req->countReqHeaders < MAX_HEADERS)
-            {
-                req->reqHeadersName[req->countReqHeaders] = req->p_newline;
-                req->countReqHeaders++;
-            }
-            else
-                return -RS500;
-
-            req->lenTail -= i;
-            req->p_newline = pn + 1;
-        }
-        else if (pr && (!pn))
-            return -RS400;
-        else
-            break;
-    }
 
     return 0;
 }
@@ -508,5 +480,15 @@ int recv_fd(int unix_sock, int num_chld, void *data, int *size_data)
     }
 
     memcpy(&fd, CMSG_DATA(cmsgp), sizeof(int));
+
+    if (*(char*)data == 1)
+    {
+        char ch = num_chld;
+        if (write(unix_sock, &ch, sizeof(ch)) < 0)
+        {
+            print_err("[%d]<%s:%d> Error write(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
+            return -1;
+        }
+    }
     return fd;
 }

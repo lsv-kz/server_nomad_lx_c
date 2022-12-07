@@ -23,7 +23,7 @@ static int send_chunk(chunked *chk, int size)
         p = chk->buf + MAX_LEN_SIZE_CHUNK;
         len = chk->i - MAX_LEN_SIZE_CHUNK;
     }
-    
+
     int ret = write_timeout(chk->sock, p, len, conf->Timeout);
     chk->i = MAX_LEN_SIZE_CHUNK;
     if (ret < 0)
@@ -47,7 +47,7 @@ void chunk_add_longlong(chunked *chk, long long ll)
         chk->allSend += len;
         return;
     }
-    
+
     while ((CHUNK_SIZE_BUF + MAX_LEN_SIZE_CHUNK) < (chk->i + len))
     {
         int l = CHUNK_SIZE_BUF + MAX_LEN_SIZE_CHUNK - chk->i;
@@ -162,7 +162,7 @@ int cgi_to_client(chunked *chk, int fdPipe)
             if (ret < 0)
                 return ret;
         }
-        
+
         int rd = CHUNK_SIZE_BUF + MAX_LEN_SIZE_CHUNK - chk->i;
         int ret = read_timeout(fdPipe, chk->buf + chk->i, rd, conf->TimeoutCGI);
         if (ret == 0)
@@ -186,20 +186,20 @@ int cgi_to_client(chunked *chk, int fdPipe)
             chk->i += ret;
         }
     }
-        
+
     return 0;
 }
 //======================================================================
-int fcgi_to_client(chunked *chk, int fdPipe, int len)
+int fcgi_to_client(chunked *chk, int fcgi_sock, int len)
 {
     if (chk->err) return -1;
     if (chk->mode == NO_SEND)
     {
         chk->allSend += len;
-        fcgi_to_cosmos(fdPipe, len, conf->TimeoutCGI);
+        fcgi_to_cosmos(fcgi_sock, len, conf->TimeoutCGI);
         return 0;
     }
-    
+
     while (len > 0)
     {
         if ((CHUNK_SIZE_BUF + MAX_LEN_SIZE_CHUNK - chk->i) <= 0)
@@ -211,9 +211,9 @@ int fcgi_to_client(chunked *chk, int fdPipe, int len)
                 return ret;
             }
         }
-            
+
         int rd = (len < (CHUNK_SIZE_BUF + MAX_LEN_SIZE_CHUNK - chk->i)) ? len : (CHUNK_SIZE_BUF + MAX_LEN_SIZE_CHUNK - chk->i);
-        int ret = read_timeout(fdPipe, chk->buf + chk->i, rd, conf->TimeoutCGI);
+        int ret = read_timeout(fcgi_sock, chk->buf + chk->i, rd, conf->TimeoutCGI);
         if (ret == 0)
         {
             print_err("<%s:%d> ret=%d\n", __func__, __LINE__, ret);
@@ -234,10 +234,10 @@ int fcgi_to_client(chunked *chk, int fdPipe, int len)
             chk->err = 1;
             return -1;
         }
-        
+
         chk->i += ret;
         len -= ret;
     }
-        
+
     return 0;
 }

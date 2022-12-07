@@ -23,17 +23,17 @@ void create_response_headers(Connect *req, String *hd, String *hdrs)
     str_cat(hd, "Server: ");
     str_cat_ln(hd, conf->ServerSoftware);
 
-    if(req->reqMethod == M_OPTIONS)
+    if (req->reqMethod == M_OPTIONS)
         str_cat(hd, "Allow: OPTIONS, GET, HEAD, POST\r\n");
 
     if (req->numPart == 1)
     {
         str_cat(hd, "Content-Type: ");
         str_cat_ln(hd, req->respContentType);
-        
+
         str_cat(hd, "Content-Length: ");
         str_llint_ln(hd, req->respContentLength);
-        
+
         str_cat(hd, "Content-Range: bytes ");
         str_llint(hd, req->offset);
         str_cat(hd, "-");
@@ -48,11 +48,12 @@ void create_response_headers(Connect *req, String *hd, String *hdrs)
             str_cat(hd, "Content-Type: ");
             str_cat_ln(hd, req->respContentType);
         }
+
         if (req->respContentLength >= 0)
         {
             str_cat(hd, "Content-Length: ");
             str_llint_ln(hd, req->respContentLength);
-            
+
             if (req->respStatus == RS200)
                 str_cat(hd, "Accept-Ranges: bytes\r\n");
         }
@@ -91,7 +92,7 @@ void create_response_headers(Connect *req, String *hd, String *hdrs)
     }
 
     int n = write_timeout(req->clientSocket, str_ptr(hd), str_len(hd), conf->Timeout);
-    if(n <= 0)
+    if (n <= 0)
     {
         print_err("<%s:%d> Sent to client response error; (%d)\n", __func__, __LINE__, n);
         hd->err = -1;
@@ -112,7 +113,7 @@ int send_response_headers(Connect *req, String *hdrs)
         print_err("<%s:%d> Error: malloc()\n", __func__, __LINE__);
         return -1;
     }
-    
+
     return 0;
 }
 //======================================================================
@@ -150,7 +151,7 @@ void send_message(Connect *req, String *hdrs, const char *msg)
     if (req->httpProt == 0)
         req->httpProt = HTTP11;
 
-    if(req->respStatus == RS204)
+    if (req->respStatus == RS204)
     {
         req->respContentLength = 0;
         send_response_headers(req, NULL);
@@ -168,7 +169,7 @@ void send_message(Connect *req, String *hdrs, const char *msg)
         if (html.err == 0)
         {
             req->respContentLength = html.len;
-            if(send_response_headers(req, hdrs))
+            if (send_response_headers(req, hdrs))
             {
                 print_err("<%s:%d> Error send_header_response()\n", __func__, __LINE__);
                 req->connKeepAlive = 0;
@@ -176,20 +177,19 @@ void send_message(Connect *req, String *hdrs, const char *msg)
             else
             {
                 req->send_bytes = write_timeout(req->clientSocket, str_ptr(&html), req->respContentLength, conf->Timeout);
-                if(req->send_bytes <= 0)
+                if (req->send_bytes <= 0)
                 {
                     print_err("<%s:%d> Error write_timeout()\n", __func__, __LINE__);
                     req->connKeepAlive = 0;
                 }
             }
+            str_free(&html);
         }
         else
         {
             print_err("<%s:%d> Error create HTML file\n", __func__, __LINE__);
             req->connKeepAlive = 0;
-            return;
         }
-        str_free(&html);
     }
 }
 //======================================================================

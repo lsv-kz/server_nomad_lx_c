@@ -83,6 +83,7 @@ pthread_mutex_lock(&mtx_thr);
         list_start = list_end = req;
 
     ++size_list;
+    ++all_req;
 pthread_mutex_unlock(&mtx_thr);
     pthread_cond_signal(&cond_list);
 }
@@ -105,7 +106,6 @@ pthread_mutex_lock(&mtx_thr);
     else
         list_start = list_end = NULL;
     --size_list;
-    ++all_req;
 pthread_mutex_unlock(&mtx_thr);
     if (num_wait_thr <= 1)
         pthread_cond_signal(&cond_new_thr);
@@ -157,7 +157,7 @@ void end_response(Connect *req)
     { // ----- Close connect -----
         if (req->err > NO_PRINT_LOG)// NO_PRINT_LOG(-1000) < err < 0
         {
-            if (req->err < -1)      // NO_PRINT_LOG(-1000) < err < -1
+            if (req->err <= -RS101) // NO_PRINT_LOG(-1000) < err <= -101
             {
                 req->respStatus = -req->err;
                 send_message(req, NULL, "");
@@ -182,7 +182,7 @@ void end_response(Connect *req)
     else
     { // ----- KeepAlive -----
     #ifdef TCP_CORK_
-        if (conf->tcp_cork == 'y')
+        if (conf->TcpCork == 'y')
         {
         #if defined(LINUX_)
             int optval = 0;
@@ -253,87 +253,47 @@ void *thr_create_manager(void *par)
 static int servSock, uxSock;
 static Connect *create_req(void);
 //======================================================================
-static void sig_handler(int sig)
+static void sig_handler_child(int sig)
 {
     if (sig == SIGINT)
     {
-        print_err("[%d] <%s:%d> ### SIGINT ### all requests: %d, num thr: %d\n", nProc, __func__, __LINE__, all_req, num_wait_thr);
-        shutdown(servSock, SHUT_RDWR);
-        close(servSock);
-        shutdown(uxSock, SHUT_RDWR);
-        close(uxSock);
+        fprintf(stderr, "[%d]<%s:%d> ### SIGINT ### all req: %d\n", nProc, __func__, __LINE__, all_req);
     }
     else if (sig == SIGSEGV)
     {
-        print_err("[%d] <%s:%d> ### SIGSEGV ###\n", nProc, __func__, __LINE__);
+        fprintf(stderr, "[%d]<%s:%d> ### SIGSEGV ###\n", nProc, __func__, __LINE__);
+        shutdown(uxSock, SHUT_RDWR);
+        close(uxSock);
         exit(1);
     }
     else
-        print_err("[%d] <%s:%d> ### sig=%d ###\n", nProc, __func__, __LINE__, sig);
+        fprintf(stderr, "[%d]<%s:%d> ### SIG=%d ###\n", nProc, __func__, __LINE__, sig);
 }
 //======================================================================
-int manager(int sockServer, int numProc, int to_parent)
+int manager(int sockServer, int numProc, int unixSock, int to_parent)
 {
     int n;
     unsigned long allConn = 1, i;
     int num_thr;
     pthread_t thr_handler, thr_man;
     int par[3];
-    char nameSock[32];
-    snprintf(nameSock, sizeof(nameSock), "unix_sock_%d", numProc);
-
-    if (remove(nameSock) == -1 && errno != ENOENT)
-    {
-        print_err("[%u]<%s:%d> Error remove(%s): %s\n", numProc, __func__, __LINE__, nameSock, strerror(errno));
-        exit(1);
-    }
-
-    int unixSock = unixBind(nameSock, SOCK_DGRAM);
-    if (unixSock == -1)
-    {
-        print_err("[%u]<%s:%d> Error unixBind()=%d\n", numProc, __func__, __LINE__, unixSock);
-        exit(1);
-    }
 
     uxSock = unixSock;
 
     fd_close_conn = to_parent;
     nProc = numProc;
     servSock = sockServer;
-
-    signal(SIGUSR1, SIG_IGN);
-    signal(SIGUSR2, SIG_IGN);
-
-    if (signal(SIGINT, sig_handler) == SIG_ERR)
+    //------------------------------------------------------------------
+    if (signal(SIGINT, sig_handler_child) == SIG_ERR)
     {
         print_err("<%s:%d> Error signal(SIGINT): %s\n", __func__, __LINE__, strerror(errno));
         exit(EXIT_FAILURE);
     }
 
-    if (signal(SIGSEGV, sig_handler) == SIG_ERR)
+    if (signal(SIGSEGV, sig_handler_child) == SIG_ERR)
     {
         print_err("<%s:%d> Error signal(SIGSEGV): %s\n", __func__, __LINE__, strerror(errno));
         exit(EXIT_FAILURE);
-    }
-    //------------------------------------------------------------------
-    long max_fd, cur_fd;
-    if (get_lim_max_fd(&max_fd, &cur_fd) == -1)
-        return -1;
-    int min_open_fd = 9;
-    int m = min_open_fd + (conf->MaxWorkConnect * 2);
-    if (m > cur_fd)
-    {
-        n = set_max_fd(m);
-        if (n < 0)
-            return -1;
-        if (conf->MaxWorkConnect != (n - min_open_fd)/2)
-        {
-            print_err("<%s:%d> Error set MAX_WORK_CONNECT\n", __func__, __LINE__);
-            shutdown(servSock, SHUT_RDWR);
-            close(servSock);
-            return -1;
-        }
-        set_max_conn((n - min_open_fd)/2);
     }
     //------------------------------------------------------------------
     if (chdir(conf->DocumentRoot))
@@ -388,7 +348,7 @@ int manager(int sockServer, int numProc, int to_parent)
         int clientSocket = recv_fd(unixSock, numProc, data, (int*)&sz);
         if (clientSocket < 0)
         {
-            print_err("[%d]<%s:%d> Error recv_fd()\n", numProc, __func__, __LINE__);
+            //print_err("[%d]<%s:%d> Error recv_fd()\n", numProc, __func__, __LINE__);
             break;
         }
 
@@ -415,12 +375,12 @@ int manager(int sockServer, int numProc, int to_parent)
         req->timeout = conf->Timeout;
         req->remoteAddr[0] = '\0';
         getpeername(clientSocket,(struct sockaddr *)&clientAddr, &addrSize);
-        n = getnameinfo((struct sockaddr *)&clientAddr, 
-                addrSize, 
-                req->remoteAddr, 
+        n = getnameinfo((struct sockaddr *)&clientAddr,
+                addrSize,
+                req->remoteAddr,
                 sizeof(req->remoteAddr),
-                NULL, 
-                0, 
+                NULL,
+                0,
                 NI_NUMERICHOST);
         if (n != 0)
             print__err(req, "<%s> Error getnameinfo()=%d: %s\n", __func__, n, gai_strerror(n));
@@ -429,16 +389,17 @@ int manager(int sockServer, int numProc, int to_parent)
         push_pollin_list(req);
     }
 
+    print_err("<%d> <%s:%d>  numThr=%d; allNumThr=%u; all_req=%u; open_conn=%d\n", numProc,
+                    __func__, __LINE__, count_thr, all_thr, all_req, count_conn);
+
     close_manager();
     pthread_join(thr_man, NULL);
 
     close_event_handler();
     pthread_join(thr_handler, NULL);
-    
-    print_err("[%d] all requests: %d, num thr: %d\n", nProc, all_req, num_wait_thr);
 
     free_fcgi_list();
-    sleep(1);
+    usleep(100000);
     return 0;
 }
 //======================================================================
@@ -448,7 +409,7 @@ Connect *create_req(void)
 
     req = malloc(sizeof(Connect));
     if (!req)
-        print_err("<%s:%d> Error malloc(): %s(%d)\n", __func__, __LINE__, str_err(errno), errno);
+        print_err("<%s:%d> Error malloc(): %s(%d)\n", __func__, __LINE__, strerror(errno), errno);
     return req;
 }
 //======================================================================

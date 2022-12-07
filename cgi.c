@@ -7,38 +7,38 @@ int get_sock_fcgi(char *script);
 pthread_mutex_t mtx_chld = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t  cond_close_cgi = PTHREAD_COND_INITIALIZER;
 
-static int num_chlds = 0;
+static int num_cgi_chlds = 0;
 //======================================================================
 int timedwait_close_cgi(void)
 {
     int ret = 0;
 pthread_mutex_lock(&mtx_chld);
-    while (num_chlds >= conf->MaxProcCgi)
+    while (num_cgi_chlds >= conf->MaxCgiProc)
     {
         struct timeval now;
         struct timespec ts;
-    
+
         gettimeofday(&now, NULL);
         ts.tv_sec = now.tv_sec + conf->TimeoutCGI;
         ts.tv_nsec = now.tv_usec * 1000;
-    
+
         ret = pthread_cond_timedwait(&cond_close_cgi, &mtx_chld, &ts);
         if (ret == ETIMEDOUT)
         {
-            print_err("<%s:%d> Timeout: %s\n", __func__, __LINE__, str_err(ret));
+            print_err("<%s:%d> Timeout: %s\n", __func__, __LINE__, strerror(ret));
             ret = -RS503;
             break;
         }
         else if (ret > 0)
         {
-            print_err("<%s:%d> Error pthread_cond_timedwait(): %s\n", __func__, __LINE__, str_err(ret));
+            print_err("<%s:%d> Error pthread_cond_timedwait(): %s\n", __func__, __LINE__, strerror(ret));
             ret = -1;
             break;
         }
     }
-    
+
     if (ret == 0)
-        ++num_chlds;
+        ++num_cgi_chlds;
 
 pthread_mutex_unlock(&mtx_chld);
     return ret;
@@ -47,7 +47,7 @@ pthread_mutex_unlock(&mtx_chld);
 void cgi_dec()
 {
 pthread_mutex_lock(&mtx_chld);
-    --num_chlds;
+    --num_cgi_chlds;
 pthread_mutex_unlock(&mtx_chld);
     pthread_cond_signal(&cond_close_cgi);
 }
@@ -56,7 +56,7 @@ const char *cgi_script_file(const char *name)
 {
     char *p;
 
-    if((p = strchr(name + 1, '/')))
+    if ((p = strchr(name + 1, '/')))
     {
         return p;
     }
@@ -65,62 +65,43 @@ const char *cgi_script_file(const char *name)
 //======================================================================
 int wait_pid(Connect *req, int pid)
 {
-    int n, status, ret = 0;
-
-    n = waitpid(pid, &status, WNOHANG);
-    if(n == pid)
+    int n = waitpid(pid, NULL, WNOHANG);
+    if (n == -1)
     {
-        ret = 0;
+        print__err(req, "<%s:%d> Error waitpid(%d): %s\n", __func__, __LINE__, pid, strerror(errno));
+        return -1;
     }
-    else if (n == -1)
+    else if (n == 0)
     {
-        print__err(req, "<%s:%d> Error waitpid(%d): %s\n", __func__, __LINE__, pid, str_err(errno));
-        ret = -1;
-    }
-    else
-    {
-        if(kill(pid, SIGKILL) == 0)
+        if (kill(pid, SIGKILL) == 0)
+            waitpid(pid, NULL, 0);
+        else
         {
-            n = waitpid(pid, &status, 0); // WNOHANG
+            print__err(req, "<%s:%d> Error waitpid(%d): %s\n", __func__, __LINE__, pid, strerror(errno));
+            return -1;
         }
-        ret = 0;
     }
 
-    return ret;
+    return 0;
 }
 //======================================================================
-int kill_script(Connect *req, int pid, int stat, const char *msg)
+void kill_script(int pid)
 {
-    int n, status;
-
-    req->connKeepAlive = 0;
-    if(stat > 0)
-    {
-        req->respStatus = stat;
-        send_message(req, NULL, msg);
-    }
-
-    if((n = kill(pid, SIGKILL)) == 0)
-    {
-        n = waitpid(pid, &status, 0);
-    }
+    if (kill(pid, SIGKILL) == 0)
+        waitpid(pid, NULL, 0);
     else
-    {
-        print__err(req, "<%s:%d> ! Error kill(%d): %s\n", __func__, __LINE__, pid, strerror(errno));
-    }
-
-    return -1;
+        print_err("<%s:%d> ! Error kill(%d): %s\n", __func__, __LINE__, pid, strerror(errno));
 }
 //======================================================================
 int cgi_chunk(Connect *req, String *hdrs, int cgi_serv_in, char *start_ptr, int ReadFromScript)
 {
     int chunk;
-    
+
     if (req->reqMethod == M_HEAD)
         chunk = NO_SEND;
     else
         chunk = ((req->httpProt == HTTP11) && req->connKeepAlive) ? SEND_CHUNK : SEND_NO_CHUNK;
- 
+
     chunked chk = {MAX_LEN_SIZE_CHUNK, chunk, 0, req->clientSocket, 0};
 
     req->numPart = 0;
@@ -140,15 +121,16 @@ int cgi_chunk(Connect *req, String *hdrs, int cgi_serv_in, char *start_ptr, int 
         if (send_response_headers(req, hdrs))
         {
             print_err("<%s:%d> Error send_header_response()\n", __func__, __LINE__);
+            return -1;
         }
         return 0;
     }
-        
+
     if (chunk == SEND_CHUNK)
     {
         str_cat(hdrs, "Transfer-Encoding: chunked\r\n");
     }
-    
+
     if (send_response_headers(req, hdrs))
     {
         print_err("<%s:%d> Error send_header_response()\n", __func__, __LINE__);
@@ -181,7 +163,7 @@ int cgi_chunk(Connect *req, String *hdrs, int cgi_serv_in, char *start_ptr, int 
         print_err("<%s:%d> Error chunk_end()\n", __func__, __LINE__);
         return -1;
     }
-    
+
     return 0;
 }
 //======================================================================
@@ -193,18 +175,18 @@ int cgi_read_headers(Connect *req, String *hdrs, int cgi_serv_in)
 
     req->respStatus = RS200;
     ReadFromScript = read_timeout(cgi_serv_in, buf, size, conf->TimeoutCGI);
-    if(ReadFromScript <= 0)
+    if (ReadFromScript <= 0)
     {
         print__err(req, "<%s:%d> ReadFromScript=%d\n", __func__, __LINE__, ReadFromScript);
         return -RS500;
     }
-    
+
     char *start_ptr = buf;
     for ( int line = 0; line < 10; ++line)
     {
         int len = 0;
         char *end_ptr, *str, *p;
-        
+
         str = end_ptr = start_ptr;
         for ( ; ReadFromScript > 0; end_ptr++)
         {
@@ -216,37 +198,32 @@ int cgi_read_headers(Connect *req, String *hdrs, int cgi_serv_in)
             else
                 len++;
         }
-        
+
         if (*end_ptr != '\n')
         {
             print__err(req, "<%s:%d> Error: Blank line not found\n", __func__, __LINE__);
             return -RS500;
         }
-        
+
         *end_ptr = 0;
-        
+
         start_ptr = end_ptr + 1;
 
         if (len == 0)
             break;
-        
+
         if (!(p = memchr(str, ':', len)))
         {
             print__err(req, "<%s:%d> Error: Line not header [%s]\n", __func__, __LINE__, str);
             return -RS500;
         }
-        
+
         if (!strlcmp_case(str, "Status", 6))
         {
             req->respStatus = atoi(p + 1);//  respStatus = strtol(p + 1, NULL, 10);
-            if(req->respStatus == RS204)
-            {
-                send_message(req, NULL, NULL);
-                return 0;
-            }
             continue;
         }
-        
+
         else if (!strlcmp_case(str, "Date", 4) || \
                 !strlcmp_case(str, "Server", 6) || \
                 !strlcmp_case(str, "Accept-Ranges", 13) || \
@@ -256,7 +233,7 @@ int cgi_read_headers(Connect *req, String *hdrs, int cgi_serv_in)
             print__err(req, "<%s:%d> %s\n", __func__, __LINE__, str);
             continue;
         }
-            
+
         str_cat_ln(hdrs, str);
         if (hdrs->err)
         {
@@ -264,7 +241,7 @@ int cgi_read_headers(Connect *req, String *hdrs, int cgi_serv_in)
             return -RS500;
         }
     }
-    
+
     return cgi_chunk(req, hdrs, cgi_serv_in, start_ptr, ReadFromScript);
 }
 //======================================================================
@@ -292,7 +269,7 @@ int cgi_fork(Connect *req)
     if (str_ptr(&req->path)[str_len(&req->path)] == '/')
         str_resize(&req->path, str_len(&req->path) - 1);
 
-    if(stat(str_ptr(&req->path), &st) == -1)
+    if (stat(str_ptr(&req->path), &st) == -1)
     {
         print__err(req, "<%s:%d> script (%s) not found\n", __func__, __LINE__, str_ptr(&req->path));
         return -RS404;
@@ -315,9 +292,9 @@ int cgi_fork(Connect *req)
     }
     //--------------------------- fork ---------------------------------
     pid_t pid = fork();
-    if(pid < 0)
+    if (pid < 0)
     {
-        print__err(req, "<%s:%d> Error fork(): %s\n", __func__, __LINE__, str_err(errno));
+        print__err(req, "<%s:%d> Error fork(): %s\n", __func__, __LINE__, strerror(errno));
         close(serv_cgi[0]);
         close(serv_cgi[1]);
         close(cgi_serv[0]);
@@ -325,30 +302,34 @@ int cgi_fork(Connect *req)
         req->connKeepAlive = 0;
         return -RS500;
     }
-    else if(pid == 0)
+    else if (pid == 0)
     {
         char s[64];
         //----------------------- child --------------------------------
         close(cgi_serv[0]);
         close(serv_cgi[1]);
-        
+
         if (serv_cgi[0] != STDIN_FILENO)
         {
             if (dup2(serv_cgi[0], STDIN_FILENO) < 0)
-                goto err_child;
-            if (close(serv_cgi[0]) < 0)
-                goto err_child;
+            {
+                fprintf(stderr, "<%s:%d> Error dup2(): %s\n", __func__, __LINE__, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+            close(serv_cgi[0]);
         }
 
         if (cgi_serv[1] != STDOUT_FILENO)
         {
             if (dup2(cgi_serv[1], STDOUT_FILENO) < 0)
-                goto err_child;
-            if (close(cgi_serv[1]) < 0)
-                goto err_child;
+            {
+                fprintf(stderr, "<%s:%d> Error dup2(): %s\n", __func__, __LINE__, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+            close(cgi_serv[1]);
         }
 
-        if(req->scriptType == php_cgi)
+        if (req->scriptType == php_cgi)
             setenv("REDIRECT_STATUS", "true", 1);
         setenv("PATH", "/bin:/usr/bin:/usr/local/bin", 1);
         setenv("SERVER_SOFTWARE", conf->ServerSoftware, 1);
@@ -358,34 +339,36 @@ int cgi_fork(Connect *req)
         setenv("REQUEST_URI", req->uri, 1);
         setenv("REQUEST_METHOD", get_str_method(req->reqMethod), 1);
         setenv("SERVER_PROTOCOL", get_str_http_prot(req->httpProt), 1);
-        if(req->req_hd.iHost >= 0)
+        if (req->req_hd.iHost >= 0)
             setenv("HTTP_HOST", req->reqHeadersValue[req->req_hd.iHost], 1);
-        if(req->req_hd.iReferer >= 0)
+        if (req->req_hd.iReferer >= 0)
             setenv("HTTP_REFERER", req->reqHeadersValue[req->req_hd.iReferer], 1);
-        if(req->req_hd.iUserAgent >= 0)
+        if (req->req_hd.iUserAgent >= 0)
             setenv("HTTP_USER_AGENT", req->reqHeadersValue[req->req_hd.iUserAgent], 1);
         setenv("SCRIPT_NAME", str_ptr(&req->scriptName), 1);
         setenv("SCRIPT_FILENAME", str_ptr(&req->path), 1);
-        if(req->reqMethod == M_POST)
+        if (req->reqMethod == M_POST)
         {
-            if(req->req_hd.iReqContentType >= 0)
+            if (req->req_hd.iReqContentType >= 0)
                 setenv("CONTENT_TYPE", req->reqHeadersValue[req->req_hd.iReqContentType], 1);
-            if(req->req_hd.iContentLength >= 0)
+            if (req->req_hd.iContentLength >= 0)
                 setenv("CONTENT_LENGTH", req->reqHeadersValue[req->req_hd.iContentLength], 1);
         }
 
         setenv("QUERY_STRING", req->sReqParam ? req->sReqParam : "", 1);
 
-        if(req->scriptType == cgi_ex)
+        int err_ = 0;
+        if (req->scriptType == cgi_ex)
         {
             execl(str_ptr(&req->path), base_name(str_ptr(&req->scriptName)), NULL);
+            err_ = errno;
         }
-        else if(req->scriptType == php_cgi)
+        else if (req->scriptType == php_cgi)
         {
             execl(conf->PathPHP, base_name(conf->PathPHP), NULL);
+            err_ = errno;
         }
 
-    err_child:
         get_time(s, sizeof(s));
         printf( "Status: 500 Internal Server Error\r\n"
                 "Content-type: text/html; charset=utf-8\r\n"
@@ -397,13 +380,13 @@ int cgi_fork(Connect *req)
                 "  <meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\">\n"
                 " </head>\n"
                 " <body>\n"
-                "  <h3> 500 Internal Server Error</h3>\n"
-                "  <p>%s(%d)</p>\n"
+                "  <h3>500 Internal Server Error</h3>\n"
+                "  <p>%s</p>\n"
                 "  <hr>\n"
                 "  %s\n"
                 " </body>\n"
-                "</html>", strerror(errno), errno, s);
-
+                "</html>", strerror(err_), s);
+        fclose(stdout);
         exit(EXIT_FAILURE);
     }
     else
@@ -412,7 +395,7 @@ int cgi_fork(Connect *req)
         close(serv_cgi[0]);
         close(cgi_serv[1]);
         //------------ write to script ------------
-        if(req->reqMethod == M_POST)
+        if (req->reqMethod == M_POST)
         {
             if (req->tail)
             {
@@ -422,21 +405,18 @@ int cgi_fork(Connect *req)
                     print__err(req, "<%s:%d> Error tail to script: %d\n", __func__, __LINE__, wr_bytes);
                     close(cgi_serv[0]);
                     close(serv_cgi[1]);
-                    return kill_script(req, pid, RS500, "2");
+                    return -RS502;
                 }
                 req->req_hd.reqContentLength -= wr_bytes;
             }
-            
-            wr_bytes = client_to_script(req->clientSocket, serv_cgi[1], &req->req_hd.reqContentLength, req->numReq);
-            if(wr_bytes < 0)
-            {
-                if (req->req_hd.reqContentLength > 0 && req->req_hd.reqContentLength < conf->ClientMaxBodySize)
-                    client_to_cosmos(req->clientSocket, (long)req->req_hd.reqContentLength);
 
+            wr_bytes = client_to_script(req->clientSocket, serv_cgi[1], &req->req_hd.reqContentLength, req->numReq);
+            if (wr_bytes < 0)
+            {
                 print__err(req, "<%s:%d> Error client_to_script() = %d\n", __func__, __LINE__, wr_bytes);
                 close(cgi_serv[0]);
                 close(serv_cgi[1]);
-                return kill_script(req, pid, RS500, "2");
+                return -RS502;
             }
         }
 
@@ -453,16 +433,14 @@ int cgi_fork(Connect *req)
             print__err(req, "<%s:%d> Error: malloc()\n", __func__, __LINE__);
             ret = -1;
         }
-        
+
         close(cgi_serv[0]);
         if (ret < 0)
-            return kill_script(req, pid, 0, "");
+            kill_script(pid);
         else
-            return wait_pid(req, pid);
+            wait_pid(req, pid);
         return ret;
     }
-
-    return 0;
 }
 //======================================================================
 int cgi(Connect *req)

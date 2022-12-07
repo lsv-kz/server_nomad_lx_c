@@ -43,56 +43,57 @@ void create_conf_file()
         exit(1);
     }
 
-    fprintf(f, "ServerSoftware   ? \n");
-    fprintf(f, "ServerAddr       0.0.0.0\n");
-    fprintf(f, "ServerPort       8080\n\n");
+    fprintf(f, "ServerSoftware  ? \n");
+    fprintf(f, "ServerAddr  0.0.0.0\n");
+    fprintf(f, "ServerPort  8080\n\n");
 
-    fprintf(f, "DocumentRoot www/html\n");
-    fprintf(f, "ScriptPath   www/cgi\n");
-    fprintf(f, "LogPath      www/logs\n");
-    fprintf(f, "PidFilePath  www/pid\n\n");
+    fprintf(f, "DocumentRoot  ?\n");
+    fprintf(f, "ScriptPath  ?\n");
+    fprintf(f, "LogPath  ?\n");
+    fprintf(f, "PidFilePath  ?\n\n");
 
-    fprintf(f, "ListenBacklog 128\n");
-    fprintf(f, "tcp_cork   n \n");
-    fprintf(f, "tcp_nodelay   y \n\n");
+    fprintf(f, "ListenBacklog  128\n");
+    fprintf(f, "TcpCork  n\n");
+    fprintf(f, "TcpNoDelay  y\n\n");
 
-    fprintf(f, "SendFile    y\n");
+    fprintf(f, "SendFile  y\n");
     fprintf(f, "SndBufSize  32768\n\n");
 
-    fprintf(f, "ConnectionsQueueSize 1024\n");
-    fprintf(f, "MaxWorkConnect       768\n");
-    fprintf(f, "MaxEventConnect      100\n\n");
+    fprintf(f, "NumCpuCores  1\n");
 
-    fprintf(f, "NumProc    4\n");
-    fprintf(f, "MaxThreads 256\n");
-    fprintf(f, "MinThreads 6\n");
-    fprintf(f, "MaxProcCgi 30\n\n");
-    
-    fprintf(f, "MaxRequestsPerClient 100\n");
-    fprintf(f, "TimeoutKeepAlive     30\n");
-    fprintf(f, "Timeout              60\n");
-    fprintf(f, "TimeoutCGI           10\n");
-    fprintf(f, "TimeoutPoll          100  # [ms]\n\n");
+    fprintf(f, "MaxWorkConnections  768\n");
+    fprintf(f, "MaxEventConnections  100\n\n");
 
-    fprintf(f, "MaxRanges    5\n\n");
+    fprintf(f, "NumProc  4\n");
+    fprintf(f, "MaxThreads  256\n");
+    fprintf(f, "MinThreads  6\n");
+    fprintf(f, "MaxCgiProc  30\n\n");
 
-    fprintf(f, "ClientMaxBodySize 50000000\n\n");
+    fprintf(f, "MaxRequestsPerClient  100\n");
+    fprintf(f, "TimeoutKeepAlive  30\n");
+    fprintf(f, "Timeout  60\n");
+    fprintf(f, "TimeoutCGI  10\n");
+    fprintf(f, "TimeoutPoll  100  # [ms]\n\n");
 
-    fprintf(f, "UsePHP     n  # [n, php-fpm, php-cgi] \n");
-    fprintf(f, "# PathPHP  127.0.0.1:9000  #  [php-fpm: 127.0.0.1:9000 (/var/run/php-fpm.sock), php-cgi: /usr/bin/php-cgi]\n\n");
+    fprintf(f, "MaxRanges  5\n\n");
+
+    fprintf(f, "ClientMaxBodySize  5000000\n\n");
+
+    fprintf(f, "UsePHP  n  # [n, php-fpm, php-cgi] \n");
+    fprintf(f, "# PathPHP  127.0.0.1:9000  #  [php-fpm: 127.0.0.1:9000 | /var/run/php-fpm.sock; php-cgi: /usr/bin/php-cgi]\n\n");
 
     fprintf(f, "index {\n"
-                "\t#index.html\n"
+                "  #index.html\n"
                 "}\n\n");
 
     fprintf(f, "fastcgi {\n"
-                "\t ~/test  127.0.0.1:9004\n"
-                " ~env      127.0.0.1:9002}\n\n");
+                "  ~/env  127.0.0.1:9002\n"
+                "}\n\n");
 
-    fprintf(f, "ShowMediaFiles N \n\n");
+    fprintf(f, "ShowMediaFiles  N\n\n");
 
     fprintf(f, "User  root\n");
-    fprintf(f, "Group www-data\n\n");
+    fprintf(f, "Group  www-data\n");
 
     fclose(f);
 }
@@ -198,13 +199,22 @@ int get_bool(Line *l, char *c)
 }
 //======================================================================
 static int line_ = 1, line_inc = 0;
+static char bracket = 0;
 //----------------------------------------------------------------------
 int getLine(FILE *f, Line *ln)
 {
     init_line(ln);
     char *p = ln->s;
     int ch, wr = 1, wr_space = 0, size = sizeof(ln->s);
-    
+
+    if (bracket)
+    {
+        *(p++) = bracket;
+        *p = 0;
+        bracket = 0;
+        return 1;
+    }
+
     if (line_inc)
     {
         ++line_;
@@ -242,7 +252,7 @@ int getLine(FILE *f, Line *ln)
         else if ((ch == '{') || (ch == '}'))
         {
             if (ln->len)
-                fseek(f, -1, 1);
+                bracket = (char)ch;
             else
             {
                 *(p++) = ch;
@@ -277,10 +287,22 @@ int getLine(FILE *f, Line *ln)
         return -1;
 }
 //======================================================================
-int find_bracket(FILE *f)
+int find_bracket(FILE *f, char c)
 {
     int ch, grid = 0;
-    
+
+    if (bracket)
+    {
+        if (c != bracket)
+        {
+            bracket = 0;
+            return 0;
+        }
+
+        bracket = 0;
+        return 1;
+    }
+
     if (line_inc)
     {
         ++line_;
@@ -320,10 +342,10 @@ int create_fcgi_list(fcgi_list_addr **l, const char *s1, const char *s2)
         return -1;
     }
 
-    t->scrpt_name = strdup(s1);
+    t->script_name = strdup(s1);
     t->addr = strdup(s2);
 
-    if (!t->scrpt_name || !t->addr)
+    if (!t->script_name || !t->addr)
     {
         fprintf(stderr, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
         return -1;
@@ -362,36 +384,32 @@ int read_conf_file_(FILE *f)
             err = get_word(&ln, c.LogPath, sizeof(c.LogPath));
         else if (!strcmp(s1, "PidFilePath") && (n == 2))
             err = get_word(&ln, c.PidFilePath, sizeof(c.PidFilePath));
-        else if (!strcmp(s1, "UsePHP") && (n == 2))
-            err = get_word(&ln, c.UsePHP, sizeof(c.UsePHP));
-        else if (!strcmp(s1, "PathPHP") && (n == 2))
-            err = get_word(&ln, c.PathPHP, sizeof(c.PathPHP));
         else if (!strcmp(s1, "ListenBacklog") && (n == 2))
             err = get_int(&ln, &c.ListenBacklog);
-        else if (!strcmp(s1, "tcp_cork") && (n == 2))
-            err = get_bool(&ln, &(c.tcp_cork));
-        else if (!strcmp(s1, "tcp_nodelay") && (n == 2))
-            err = get_bool(&ln, &(c.tcp_nodelay));
+        else if (!strcmp(s1, "TcpCork") && (n == 2))
+            err = get_bool(&ln, &(c.TcpCork));
+        else if (!strcmp(s1, "TcpNoDelay") && (n == 2))
+            err = get_bool(&ln, &(c.TcpNoDelay));
         else if (!strcmp(s1, "SendFile") && (n == 2))
             err = get_bool(&ln, &(c.SendFile));
         else if (!strcmp(s1, "SndBufSize") && (n == 2))
             err = get_int(&ln, &c.SndBufSize);
-        else if (!strcmp(s1, "MaxEventConnect") && (n == 2))
-            err = get_int(&ln, &c.MaxEventConnect);
-        else if (!strcmp(s1, "ConnectionsQueueSize") && (n == 2))
-            err = get_int(&ln, &c.ConnectionsQueueSize);
-        else if (!strcmp(s1, "MaxWorkConnect") && (n == 2))
-            err = get_int(&ln, &c.MaxWorkConnect);
+        else if (!strcmp(s1, "NumCpuCores") && (n == 2))
+            err = get_int(&ln, (int*)&c.NumCpuCores);
+        else if (!strcmp(s1, "MaxWorkConnections") && (n == 2))
+            err = get_int(&ln, &c.MaxWorkConnections);
+        else if (!strcmp(s1, "MaxEventConnections") && (n == 2))
+            err = get_int(&ln, &c.MaxEventConnections);
         else if (!strcmp(s1, "NumProc") && (n == 2))
-            err = get_int(&ln, &c.NumProc);
+            err = get_int(&ln, (int*)&c.NumProc);
         else if (!strcmp(s1, "MaxThreads") && (n == 2))
-            err = get_int(&ln, &c.MaxThreads);
+            err = get_int(&ln, (int*)&c.MaxThreads);
         else if (!strcmp(s1, "MinThreads") && (n == 2))
-            err = get_int(&ln, &c.MinThreads);
+            err = get_int(&ln, (int*)&c.MinThreads);
+        else if (!strcmp(s1, "MaxCgiProc") && (n == 2))
+            err = get_int(&ln, (int*)&c.MaxCgiProc);
         else if (!strcmp(s1, "MaxRequestsPerClient") && (n == 2))
             err = get_int(&ln, &c.MaxRequestsPerClient);
-        else if (!strcmp(s1, "MaxProcCgi") && (n == 2))
-            err = get_int(&ln, &c.MaxProcCgi);
         else if (!strcmp(s1, "TimeoutKeepAlive") && (n == 2))
             err = get_int(&ln, &c.TimeoutKeepAlive);
         else if (!strcmp(s1, "Timeout") && (n == 2))
@@ -402,6 +420,10 @@ int read_conf_file_(FILE *f)
             err = get_int(&ln, &c.TimeoutPoll);
         else if (!strcmp(s1, "MaxRanges") && (n == 2))
             err = get_int(&ln, &c.MaxRanges);
+        else if (!strcmp(s1, "UsePHP") && (n == 2))
+            err = get_word(&ln, c.UsePHP, sizeof(c.UsePHP));
+        else if (!strcmp(s1, "PathPHP") && (n == 2))
+            err = get_word(&ln, c.PathPHP, sizeof(c.PathPHP));
         else if (!strcmp(s1, "ShowMediaFiles") && (n == 2))
             err = get_bool(&ln, &c.ShowMediaFiles);
         else if (!strcmp(s1, "ClientMaxBodySize") && (n == 2))
@@ -412,7 +434,7 @@ int read_conf_file_(FILE *f)
             err = get_word(&ln, c.group, sizeof(c.group));
         else if (!strcmp(s1, "index") && (n == 1))
         {
-            if (find_bracket(f) == 0)
+            if (find_bracket(f, '{') == 0)
             {
                 fprintf(stderr, "<%s:%d> Error not found \"{\"\n", __func__, __LINE__);
                 return -1;
@@ -446,9 +468,9 @@ int read_conf_file_(FILE *f)
         }
         else if (!strcmp(s1, "fastcgi") && (n == 1))
         {
-            if (find_bracket(f) == 0)
+            if (find_bracket(f, '{') == 0)
             {
-                fprintf(stderr, "<%s:%d> Error not found \"{\"\n", __func__, __LINE__);
+                fprintf(stderr, "<%s:%d> Error not found \"{\", line: %u\n", __func__, __LINE__, line_);
                 return -1;
             }
 
@@ -457,7 +479,7 @@ int read_conf_file_(FILE *f)
                 char s2[256];
                 if (get_word(&ln, s1, sizeof(s1)) <= 0)
                     return -1;
-                    
+
                 if (get_word(&ln, s2, sizeof(s2)) <= 0)
                     return -1;
 
@@ -514,57 +536,46 @@ int read_conf_file_(FILE *f)
         return -1;
     }
     //------------------------------------------------------------------
+    if (conf->MaxEventConnections <= 0)
+    {
+        fprintf(stderr, "<%s:%d> Error: MaxEventConnect=%d\n", __func__, __LINE__, conf->MaxEventConnections);
+        exit(1);
+    }
+
+    if (conf->SndBufSize <= 0)
+    {
+        fprintf(stderr, "<%s:%d> Error: SndBufSize=%d\n", __func__, __LINE__, conf->SndBufSize);
+        exit(1);
+    }
+    //------------------------------------------------------------------
     if ((c.NumProc < 1) || (c.NumProc > 8))
     {
-        fprintf(stderr, "<%s:%d> Error config file: NumProc = %d; [1 < NumProc <= 6]\n", __func__, __LINE__, c.NumProc);
+        fprintf(stderr, "<%s:%d> Error: NumProc = %d; [1 <= NumProc <= 8]\n", __func__, __LINE__, c.NumProc);
         return -1;
     }
 
-    if (c.MinThreads < 1)
-        c.MinThreads = 1;
-
-    if (c.MinThreads > c.MaxThreads)
+    if ((c.MinThreads > c.MaxThreads) || (c.MinThreads < 1))
     {
-        fprintf(stderr, "<%s:%d> Error config file: NumThreads > MaxThreads\n", __func__, __LINE__);
+        fprintf(stderr, "<%s:%d> Error: MinThreads=%u\n", __func__, __LINE__, c.MinThreads);
         return -1;
     }
     //------------------------------------------------------------------
-    if (c.ListenBacklog < 128)
-        c.ListenBacklog = 128;
-    //------------------------------------------------------------------
-    long max_fd, cur_fd;
-    if (get_lim_max_fd(&max_fd, &cur_fd) == -1)
-        return -1;
-    // main process: fd_stdio = 3, fd_logs = 2, sock = 1 + 1 + NumProc, fd_pipe = 1; // 8 + NumProc
-    int min_open_fd = 8 + c.NumProc;
-    if (c.ConnectionsQueueSize <= 0)
+    if (c.MaxWorkConnections <= 0)
     {
-        fprintf(stderr, "<%s:%d> Error config file: SizeQueueConnect=?\n", __func__, __LINE__);
+        fprintf(stderr, "<%s:%d> Error: MaxWorkConnections=?\n", __func__, __LINE__);
         return -1;
     }
 
-    if ((min_open_fd + c.ConnectionsQueueSize) > cur_fd)
-    {
-        n = set_max_fd(min_open_fd + c.ConnectionsQueueSize);
-        if (n < 0)
-            return -1;
-
-        if ((min_open_fd + c.ConnectionsQueueSize) > n)
-            c.ConnectionsQueueSize = n - min_open_fd;
-    }
-    // child process: fd_stdio = 3, fd_logs = 2, sock = 3, fd_pipe = 1; // 9
-    min_open_fd = 9;
-    if (c.MaxWorkConnect <= min_open_fd)
-    {
-        fprintf(stderr, "<%s:%d> Error config file: MaxWorkConnect=?\n", __func__, __LINE__);
+    const int fd_stdio = 3, fd_logs = 2, fd_serv_sock = 2, fd_pipe = 1; // 8
+    long min_open_fd = fd_stdio + fd_logs + fd_serv_sock + fd_pipe;
+    int max_fd = min_open_fd + c.MaxWorkConnections * 2;
+    n = set_max_fd(max_fd);
+    if (n < 0)
         return -1;
-    }
-
-    n = min_open_fd + (c.MaxWorkConnect * 2);
-    if (n > cur_fd)
+    else if (n < max_fd)
     {
-        if (n > max_fd)
-            c.MaxWorkConnect = (max_fd - min_open_fd)/2;
+        n = (n - min_open_fd)/2;
+        c.MaxWorkConnections = n;
     }
 
     return 0;
@@ -645,7 +656,7 @@ void free_fcgi_list()
         c.fcgi_list = c.fcgi_list->next;
         if (prev)
         {
-            free(prev->scrpt_name);
+            free(prev->script_name);
             free(prev->addr);
             free(prev);
         }
@@ -674,16 +685,11 @@ int read_conf_file(const char *path_conf)
         return -1;
     }
 
-    int n;
-    if ((n = read_conf_file_(f)))
+    int n = read_conf_file_(f);
+    if (n)
         free_fcgi_list();
     fclose(f);
     return n;
-}
-//======================================================================
-void set_max_conn(int n)
-{
-    c.MaxWorkConnect = n;
 }
 //======================================================================
 long get_lim_max_fd(long *max, long *cur)

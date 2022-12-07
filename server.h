@@ -34,8 +34,8 @@
 #include <sys/un.h>
 #include <sys/resource.h>
 
-#define    LINUX_ 
-//#define    FREEBSD_ 
+#define    LINUX_
+//#define    FREEBSD_
 #define    SEND_FILE_
 #define    TCP_CORK_
 
@@ -46,7 +46,7 @@
 #define    NO_PRINT_LOG      -1000
 
 typedef struct fcgi_list_addr {
-    char *scrpt_name;
+    char *script_name;
     char *addr;
     struct fcgi_list_addr *next;
 } fcgi_list_addr;
@@ -62,7 +62,7 @@ enum {
 
 enum {
     M_GET = 1, M_HEAD, M_POST, M_OPTIONS, M_PUT,
-    M_PATCH, M_DELETE, M_TRACE, M_CONNECT   
+    M_PATCH, M_DELETE, M_TRACE, M_CONNECT
 };
 
 enum { HTTP09 = 1, HTTP10, HTTP11, HTTP2 };
@@ -100,20 +100,21 @@ typedef struct Config
     char PathPHP[MAX_PATH];
 
     int ListenBacklog;
-    char tcp_cork;
-    char tcp_nodelay;
+    char TcpCork;
+    char TcpNoDelay;
 
     char SendFile;
     int SndBufSize;
-    int MaxEventConnect;
-    
-    int ConnectionsQueueSize;
-    int MaxWorkConnect;
 
-    int NumProc;
-    int MaxThreads;
-    int MinThreads;
-    int MaxProcCgi;
+    unsigned int NumCpuCores;
+
+    int MaxWorkConnections;
+    int MaxEventConnections;
+
+    unsigned int NumProc;
+    unsigned int MaxThreads;
+    unsigned int MinThreads;
+    unsigned int MaxCgiProc;
 
     int MaxRequestsPerClient;
     int TimeoutKeepAlive;
@@ -142,7 +143,7 @@ typedef struct Config
 
 extern const struct Config* const conf;
 //======================================================================
-typedef struct 
+typedef struct
 {
     int  iConnection;
     int  iHost;
@@ -173,10 +174,10 @@ typedef struct Connect{
     int  err;
     char remoteAddr[64];
 
-    char bufReq[SIZE_BUF_REQUEST]; 
+    char bufReq[SIZE_BUF_REQUEST];
+
     int  lenBufReq;
     char *p_newline;
-    
     char *tail;
     int  lenTail;
 
@@ -202,7 +203,6 @@ typedef struct Connect{
 
     String scriptName;
     String path;
-    int  sizePath;
 
     int  scriptType;
     int  respStatus;
@@ -243,8 +243,6 @@ int fcgi(Connect *req);
 void init_struct_request(Connect *req);
 //----------------------------------------------------------------------
 int create_client_socket(const char *host);
-int unixBind(const char *path, int type);
-int unixConnect(const char *path, int type);
 //----------------------------------------------------------------------
 int encode(const char *s_in, char *s_out, int len_out);
 int decode(const char *s_in, int len_in, char *s_out, int len_out);
@@ -252,26 +250,23 @@ int decode(const char *s_in, int len_in, char *s_out, int len_out);
 int read_timeout(int fd, char *buf, int len, int timeout);
 int write_timeout(int sock, const char *buf, int len, int timeout);
 int client_to_script(int fd_in, int fd_out, long long *cont_len, int n);
-long client_to_cosmos(int fd_in, long size);
 long cgi_to_cosmos(int fd_in, int timeout);
 long fcgi_to_cosmos(int fd_in, int size, int timeout);
 int fcgi_read_padding(int fd_in, long len, int timeout);
-int fcgi_read_stderr(int fd_in, int cont_len, int timeout);
+int fcgi_read_to_stderr(int fd_in, int cont_len, int timeout);
 int send_file_ux(int fd_out, int fd_in, char *buf, int *size, off_t offset, long long *cont_len);
-int read_headers(Connect *req, int timeout1, int timeout2);
 
 int hd_read(Connect *req);
-int empty_line(Connect *req);
 
 int send_fd(int unix_sock, int fd, void *data, int size_data);
 int recv_fd(int unix_sock, int num_chld, void *data, int *size_data);
 //----------------------------------------------------------------------
-void get_time_run(int a, int b, struct timeval *time1, struct timeval *time2);
 void send_message(Connect *req, String *hdrs, const char *msg);
 int send_response_headers(Connect *req, String *hdrs);
 const char *status_resp(int st);
 //----------------------------------------------------------------------
 int get_time(char *s, int size_buf);
+int log_time(char *s, int size_buf);
 const char *strstr_case(const char * s1, const char *s2);
 int strlcmp_case(const char *s1, const char *s2, int len);
 
@@ -287,7 +282,6 @@ char *content_type(const char *s);
 const char *base_name(const char *path);
 int parse_startline_request(Connect *req, char *s);
 int parse_headers(Connect *req, char *s, int i);
-const char *str_err(int i);
 //----------------------------------------------------------------------
 void close_logs(void);
 void print(const char *format, ...);
@@ -296,9 +290,6 @@ void print__err(Connect *req, const char *format, ...);
 void print_log(Connect *req);
 //----------------------------------------------------------------------
 int exit_thr(void);
-void start_req(void);
-void wait_close_req(int num_chld, int n);
-void timedwait_close_conn(void);
 void close_req(void);
 void push_resp_list(Connect *req);
 Connect *pop_resp_list(void);

@@ -5,11 +5,10 @@ int response2(Connect *req);
 void response1(int num_chld)
 {
     int n;
-    int lenRootDir, lenCgiDir;
     const char *p;
     Connect *req;
 
-    while(1)
+    while (1)
     {
         req = pop_resp_list();
         if (!req)
@@ -30,7 +29,7 @@ void response1(int num_chld)
             print__err(req, "<%s:%d>  Error parse_startline_request(): %d\n", __func__, __LINE__, ret);
             goto end;
         }
-     
+
         for (int i = 1; i < req->countReqHeaders; ++i)
         {
             ret = parse_headers(req, req->reqHeadersName[i], i);
@@ -42,7 +41,7 @@ void response1(int num_chld)
         }
         //--------------------------------------------------------------
     #ifdef TCP_CORK_
-        if (conf->tcp_cork == 'y')
+        if (conf->TcpCork == 'y')
         {
         #if defined(LINUX_)
             int optval = 1;
@@ -93,7 +92,7 @@ void response1(int num_chld)
         }
         clean_path(req->decodeUri);
         req->lenDecodeUri = strlen(req->decodeUri);
-        
+
         if (strstr(req->uri, ".php") && strcmp(conf->UsePHP, "php-cgi") && strcmp(conf->UsePHP, "php-fpm"))
         {
             print__err(req, "<%s:%d> 404\n", __func__, __LINE__);
@@ -111,13 +110,6 @@ void response1(int num_chld)
         //--------------------------------------------------------------
         if ((req->reqMethod == M_GET) || (req->reqMethod == M_HEAD) || (req->reqMethod == M_POST))
         {
-            lenRootDir = strlen(conf->DocumentRoot);
-            lenCgiDir = strlen(conf->ScriptPath);
-            if ((lenCgiDir - lenRootDir) < 0)
-                req->sizePath = lenRootDir + req->lenDecodeUri + 256 + 1;
-            else
-                req->sizePath = lenCgiDir + req->lenDecodeUri + 256 + 1;
-
             str_cpy(&req->path, conf->DocumentRoot);
             str_cat(&req->path, req->decodeUri);
             if (req->path.err == 0)
@@ -132,8 +124,7 @@ void response1(int num_chld)
                     else
                         continue;
                 }
-                else
-                    req->sizePath = 0;
+
                 req->err = ret;
             }
             else
@@ -148,12 +139,6 @@ void response1(int num_chld)
             req->err = -RS501;
 
     end:
-        if (req->err <= -RS101)
-        {
-            if ((req->reqMethod == M_POST) || (req->reqMethod == M_PUT))
-                req->connKeepAlive = 0;
-        }
-
         end_response(req);
 
         n = end_thr(0);
@@ -196,14 +181,14 @@ int fastcgi(Connect* req, const char* uri)
     fcgi_list_addr* i = conf->fcgi_list;
     for (; i; i = i->next)
     {
-        if (i->scrpt_name[0] == '~')
+        if (i->script_name[0] == '~')
         {
-            if (!strcmp(p, i->scrpt_name + 1))
+            if (!strcmp(p, i->script_name + 1))
                 break;
         }
         else
         {
-            if (!strcmp(uri, i->scrpt_name))
+            if (!strcmp(uri, i->script_name))
                 break;
         }
     }
@@ -211,7 +196,7 @@ int fastcgi(Connect* req, const char* uri)
     if (!i)
         return -RS404;
     req->scriptType = fast_cgi;
-    str_cpy(&req->scriptName, i->scrpt_name);
+    str_cpy(&req->scriptName, i->script_name);
 
     return fcgi(req);
 }
@@ -255,7 +240,7 @@ int response2(Connect *req)
         return ret;
     }
 
-    if (!strncmp(req->decodeUri, "/cgi-bin/", 9) 
+    if (!strncmp(req->decodeUri, "/cgi-bin/", 9)
         || !strncmp(req->decodeUri, "/cgi/", 5))
     {
         req->scriptType = cgi_ex;
@@ -385,7 +370,7 @@ int response2(Connect *req)
         {
             return ret;
         }
-        
+
         req->respStatus = RS206;
         if (req->numPart == 1)
         {
@@ -450,20 +435,20 @@ int response2(Connect *req)
         close(req->fd);
         return n;
     }
-    
+
     if (send_response_headers(req, NULL))
     {
         print_err("<%s:%d>  Error send_header_response()\n", __func__, __LINE__);
         close(req->fd);
         return -1;
     }
-    
+
     if (req->reqMethod == M_HEAD)
     {
         close(req->fd);
         return 0;
     }
-    
+
     push_pollout_list(req);
     return 1;
 }
@@ -482,24 +467,24 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
     }
     send_all_bytes += snprintf(buf, sizeof(buf), "\r\n--%s--\r\n", boundary);
     req->respContentLength = send_all_bytes;
-    
+
     str_cat(hdrs, "Content-Type: multipart/byteranges; boundary=");
     str_cat_ln(hdrs, boundary);
-    
+
     str_cat(hdrs, "Content-Length: ");
     str_llint_ln(hdrs, send_all_bytes);
-    
+
     if (hdrs->err)
         return -1;
-    
+
     if (send_response_headers(req, hdrs))
         return -1;
-    
+
     if (req->reqMethod == M_HEAD)
         return 0;
-    
+
     send_all_bytes = 0;
-    
+
     for (i = 0; i < req->numPart; i++)
     {
         range = &req->rangeBytes[i];
@@ -507,7 +492,7 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
         {
             print_err("<%s:%d> Error create_multipart_head()=%d\n", __func__, __LINE__, n);
             return -1;
-        } 
+        }
 
         n = write_timeout(req->clientSocket, buf, strlen(buf), conf->Timeout);
         if (n < 0)
@@ -520,7 +505,7 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
         n = send_file_ux(req->clientSocket, req->fd, rd_buf, size_buf, range->start, &range->len);
         if (n < 0)
         {
-            print_err("<%s:%d> Error: Sent %lld bytes\n", __func__, __LINE__, 
+            print_err("<%s:%d> Error: Sent %lld bytes\n", __func__, __LINE__,
                     send_all_bytes += (len - range->len));
             return -1;
         }
@@ -543,7 +528,7 @@ int send_multypart(Connect *req, String *hdrs, char *rd_buf, int *size_buf)
 int create_multipart_head(Connect *req, Range *ranges, char *buf, int len_buf)
 {
     int n, all = 0;
-    
+
     n = snprintf(buf, len_buf, "\r\n--%s\r\n", boundary);
     buf += n;
     len_buf -= n;
@@ -558,7 +543,7 @@ int create_multipart_head(Connect *req, Range *ranges, char *buf, int len_buf)
     }
     else
         return 0;
-    
+
     if (len_buf > 0)
     {
         n = snprintf(buf, len_buf,

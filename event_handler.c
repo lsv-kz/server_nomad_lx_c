@@ -118,7 +118,7 @@ static void del_from_list(Connect *r)
 {
     if (r->event == POLLOUT)
         close(r->fd);
-    
+
     if (r->prev && r->next)
     {
         r->prev->next = r->next;
@@ -149,7 +149,7 @@ pthread_mutex_lock(&mtx_);
             list_end->next = list_new_start;
         else
             list_start = list_new_start;
-        
+
         list_new_start->prev = list_end;
         list_end = list_new_end;
         list_new_start = list_new_end = NULL;
@@ -163,7 +163,7 @@ pthread_mutex_unlock(&mtx_);
     for ( ; r; r = next)
     {
         next = r->next;
-        
+
         if (((t - r->sock_timer) >= r->timeout) && (r->sock_timer != 0))
         {
             if (r->lenBufReq)
@@ -183,7 +183,7 @@ pthread_mutex_unlock(&mtx_);
         {
             if (r->sock_timer == 0)
                 r->sock_timer = t;
-            
+
             pollfd_arr[i].fd = r->clientSocket;
             pollfd_arr[i].events = r->event;
             conn_array[i] = r;
@@ -226,7 +226,7 @@ int poll_(int num_chld, int i, int nfd)
                 del_from_list(r);
                 end_response(r);
             }
-            else if (wr > 0) 
+            else if (wr > 0)
                 r->sock_timer = 0;
             else if (wr == -EAGAIN)
             {
@@ -283,18 +283,6 @@ void *event_handler(void *arg)
     size_buf = conf->SndBufSize;
     snd_buf = NULL;
 
-    if (conf->MaxEventConnect <= 0)
-    {
-        print_err("[%d]<%s:%d> Error config file: MaxEventConnect=%d\n", num_chld, __func__, __LINE__, conf->MaxEventConnect);
-        exit(1);
-    }
-    
-    if (conf->SndBufSize <= 0)
-    {
-        print_err("[%d]<%s:%d> Error config file: SndBufSize=%d\n", num_chld, __func__, __LINE__, conf->SndBufSize);
-        exit(1);
-    }
-
 #if defined(SEND_FILE_) && (defined(LINUX_) || defined(FREEBSD_))
     if (conf->SendFile != 'y')
 #endif
@@ -307,14 +295,14 @@ void *event_handler(void *arg)
         }
     }
 
-    pollfd_arr = malloc(sizeof(struct pollfd) * conf->MaxWorkConnect);
+    pollfd_arr = malloc(sizeof(struct pollfd) * conf->MaxWorkConnections);
     if (!pollfd_arr)
     {
         print_err("[%d]<%s:%d> Error malloc(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
         exit(1);
     }
 
-    conn_array = malloc(sizeof(Connect*) * conf->MaxWorkConnect);
+    conn_array = malloc(sizeof(Connect*) * conf->MaxWorkConnections);
     if (!conn_array)
     {
         print_err("[%d]<%s:%d> Error malloc(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
@@ -340,8 +328,8 @@ pthread_mutex_unlock(&mtx_);
         int nfd;
         for (int i = 0; count_resp > 0; )
         {
-            if (count_resp > conf->MaxEventConnect)
-                nfd = conf->MaxEventConnect;
+            if (count_resp > conf->MaxEventConnections)
+                nfd = conf->MaxEventConnections;
             else
                 nfd = count_resp;
 
@@ -366,7 +354,7 @@ pthread_mutex_unlock(&mtx_);
 #endif
         if (snd_buf)
             free(snd_buf);
-    print_err("***** Exit [%s:proc=%d] *****\n", __func__, num_chld);
+    //print_err("***** Exit [%s:proc=%d] *****\n", __func__, num_chld);
     return NULL;
 }
 //======================================================================
@@ -417,9 +405,6 @@ void close_event_handler(void)
 //======================================================================
 void init_struct_request(Connect *req)
 {
-    //str_free(&req->path);
-    //str_free(&req->scriptName);
-    
     req->bufReq[0] = '\0';
     req->decodeUri[0] = '\0';
     req->sLogTime[0] = '\0';
@@ -430,7 +415,6 @@ void init_struct_request(Connect *req)
     req->reqHeadersValue[0] = NULL;
     req->lenBufReq = 0;
     req->lenTail = 0;
-    req->sizePath = 0;
     req->reqMethod = 0;
     req->uriLen = 0;
     req->lenDecodeUri = 0;
