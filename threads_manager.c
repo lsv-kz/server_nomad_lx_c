@@ -277,7 +277,12 @@ int manager(int sockServer, int numProc, int unixSock, int to_parent)
     int num_thr;
     pthread_t thr_handler, thr_man;
     int par[3];
-
+    //------------------------------------------------------------------
+    /*int rcvbuf;
+    socklen_t optlen = sizeof(rcvbuf);
+    getsockopt(unixSock, SOL_SOCKET, SO_RCVBUF, &rcvbuf, &optlen);
+    fprintf(stderr, "  <%s:%d> AF_UNIX: SO_RCVBUF=%d\n", __func__, __LINE__, rcvbuf);*/
+    //------------------------------------------------------------------
     uxSock = unixSock;
 
     fd_close_conn = to_parent;

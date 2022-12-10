@@ -480,15 +480,5 @@ int recv_fd(int unix_sock, int num_chld, void *data, int *size_data)
     }
 
     memcpy(&fd, CMSG_DATA(cmsgp), sizeof(int));
-
-    if (*(char*)data == 1)
-    {
-        char ch = num_chld;
-        if (write(unix_sock, &ch, sizeof(ch)) < 0)
-        {
-            print_err("[%d]<%s:%d> Error write(): %s\n", num_chld, __func__, __LINE__, strerror(errno));
-            return -1;
-        }
-    }
     return fd;
 }

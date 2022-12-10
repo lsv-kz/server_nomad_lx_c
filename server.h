@@ -103,6 +103,8 @@ typedef struct Config
     char TcpCork;
     char TcpNoDelay;
 
+    //int SockDgramBufSize;
+
     char SendFile;
     int SndBufSize;
 

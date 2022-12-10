@@ -149,7 +149,7 @@ int create_client_socket(const char *host)
     return sockfd;
 }
 //======================================================================
-int get_sndbuf(int domain, int type, int protocol)
+int get_sock_buf(int domain, int optname, int type, int protocol)
 {
     int sock = socket(domain, type, protocol);
     if (sock < 0)
@@ -160,7 +160,7 @@ int get_sndbuf(int domain, int type, int protocol)
 
     int sndbuf;
     socklen_t optlen = sizeof(sndbuf);
-    if (getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &sndbuf, &optlen) < 0)
+    if (getsockopt(sock, SOL_SOCKET, optname, &sndbuf, &optlen) < 0)
     {
         fprintf(stderr, "<%s:%d> Error getsockopt(SO_SNDBUF): %s\n", __func__, __LINE__, strerror(errno));
         close(sock);
