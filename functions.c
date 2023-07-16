@@ -179,6 +179,143 @@ const char *get_str_http_prot(int i)
     return "?";
 }
 //======================================================================
+const char *get_str_operation(enum OPERATION_TYPE n)
+{
+    switch (n)
+    {
+        case READ_REQUEST:
+            return "READ_REQUEST";
+        case SEND_RESP_HEADERS:
+            return "SEND_RESP_HEADERS";
+        case SEND_ENTITY:
+            return "SEND_ENTITY";
+        case DYN_PAGE:
+            return "DYN_PAGE";
+    }
+
+    return "?";
+}
+//======================================================================
+const char *get_cgi_operation(enum CGI_OPERATION n)
+{
+    switch (n)
+    {
+        case CGI_CREATE_PROC:
+            return "CGI_CREATE_PROC";
+        case CGI_STDIN:
+            return "CGI_STDIN";
+        case CGI_READ_HTTP_HEADERS:
+            return "CGI_READ_HTTP_HEADERS";
+        case CGI_SEND_HTTP_HEADERS:
+            return "CGI_SEND_HTTP_HEADERS";
+        case CGI_SEND_ENTITY:
+            return "CGI_SEND_ENTITY";
+    }
+
+    return "?";
+}
+//======================================================================
+const char *get_fcgi_operation(enum FCGI_OPERATION n)
+{
+    switch (n)
+    {
+        case FASTCGI_CONNECT:
+            return "FASTCGI_CONNECT";
+        case FASTCGI_BEGIN:
+            return "FASTCGI_BEGIN";
+        case FASTCGI_PARAMS:
+            return "FASTCGI_PARAMS";
+        case FASTCGI_STDIN:
+            return "FASTCGI_STDIN";
+        case FASTCGI_READ_HTTP_HEADERS:
+            return "FASTCGI_READ_HTTP_HEADERS";
+        case FASTCGI_SEND_HTTP_HEADERS:
+            return "FASTCGI_SEND_HTTP_HEADERS";
+        case FASTCGI_SEND_ENTITY:
+            return "FASTCGI_SEND_ENTITY";
+        case FASTCGI_READ_ERROR:
+            return "FASTCGI_READ_ERROR";
+        case FASTCGI_CLOSE:
+            return "FASTCGI_CLOSE";
+    }
+
+    return "?";
+}
+//======================================================================
+const char *get_fcgi_status(enum FCGI_STATUS n)
+{
+    switch (n)
+    {
+        case FCGI_READ_DATA:
+            return "FCGI_READ_DATA";
+        case FCGI_READ_HEADER:
+            return "FCGI_READ_HEADER";
+        case FCGI_READ_PADDING:
+            return "FCGI_READ_PADDING";
+    }
+
+    return "?";
+}
+//======================================================================
+const char *get_scgi_operation(enum SCGI_OPERATION n)
+{
+    switch (n)
+    {
+        case SCGI_CONNECT:
+            return "SCGI_CONNECT";
+        case SCGI_PARAMS:
+            return "SCGI_PARAMS";
+        case SCGI_STDIN:
+            return "SCGI_STDIN";
+        case SCGI_READ_HTTP_HEADERS:
+            return "SCGI_READ_HTTP_HEADERS";
+        case SCGI_SEND_HTTP_HEADERS:
+            return "SCGI_SEND_HTTP_HEADERS";
+        case SCGI_SEND_ENTITY:
+            return "SCGI_SEND_ENTITY";
+    }
+
+    return "?";
+}
+//======================================================================
+const char *get_cgi_type(enum CGI_TYPE n)
+{
+    switch (n)
+    {
+        case NO_CGI:
+            return "NO_CGI";
+        case CGI:
+            return "CGI";
+        case PHPCGI:
+            return "PHPCGI";
+        case PHPFPM:
+            return "PHPFPM";
+        case FASTCGI:
+            return "FASTCGI";
+        case SCGI:
+            return "SCGI";
+    }
+
+    return "?";
+}
+//======================================================================
+const char *get_cgi_dir(enum DIRECT n)
+{
+    switch (n)
+    {
+        case FROM_CGI:
+            return "FROM_CGI";
+        case TO_CGI:
+            return "TO_CGI";
+        case FROM_CLIENT:
+            return "FROM_CLIENT";
+        case TO_CLIENT:
+            return "TO_CLIENT";
+    }
+
+    return "?";
+}
+//======================================================================
 char *strstr_lowercase(char * s1, char *s2)
 {
     int i, len = strlen(s2);
@@ -502,53 +639,58 @@ end:
 //======================================================================
 int clean_path(char *path)
 {
-    int slash = 0, comma = 0, cnt = 0;
-    char *p = path, ch;
+    unsigned int num_subfolder = 0;
+    const unsigned int max_subfolder = 20;
+    int arr[max_subfolder];
+    int i = 0, j = 0;
+    char ch;
 
-    while ((ch = *path))
+    while ((ch = *(path + j)))
     {
-        if (ch == '/')
+        if (!memcmp(path + j, "/../", 4))
         {
-            if (!slash)
-            {
-                *p++ = *path++;
-                slash = 1;
-                ++cnt;
-            }
-            else path++;
-            comma = 0;
-        }
-        else if (ch == '.')
-        {
-            if (comma && slash)
-            {
-                *p = 0;
-                return 0;
-            }
-
-            comma = 1;
-
-            if (slash) path++;
+            if (num_subfolder)
+                i = arr[--num_subfolder];
             else
+                return -1;
+            j += 3;
+        }
+        else if (!memcmp(path + j, "//", 2))
+            j += 1;
+        else if (!memcmp(path + j, "/./", 3))
+            j += 2;
+        else if (!memcmp(path + j, ".\0", 2))
+            break;
+        else if (!memcmp(path + j, "/..\0", 4))
+        {
+            if (num_subfolder)
             {
-                *p++ = *path++;
-                ++cnt;
+                i = arr[--num_subfolder];
+                i++;
+                break;
             }
+            else
+                return -1;
         }
         else
         {
-            if (comma && slash)
+            if (ch == '/')
             {
-                *p = 0;
-                return 0;
+                if (num_subfolder < max_subfolder)
+                    arr[num_subfolder++] = i;
+                else
+                    return -1;
             }
-            *p++ = *path++;
-            slash = comma = 0;
-            ++cnt;
+            
+            *(path + i) = ch;
+            ++i;
+            ++j;
         }
     }
-    *p = 0;
-    return cnt;
+    
+    *(path + i) = 0;
+
+    return i;
 }
 //======================================================================
 const char *base_name(const char *path)
@@ -717,4 +859,147 @@ int parse_headers(Connect *req, char *pName, int i)
     req->reqHeadersValue[i] = pVal;
 
     return 0;
+}
+//======================================================================
+int find_empty_line(Connect *req)
+{
+    req->timeout = conf->Timeout;
+    char *pCR, *pLF, ch;
+    while (req->lenTail > 0)
+    {
+        int i = 0, len_line = 0;
+        pCR = pLF = NULL;
+        while (i < req->lenTail)
+        {
+            ch = *(req->p_newline + i);
+            if (ch == '\r')// found CR
+            {
+                if (i == (req->lenTail - 1))
+                    return 0;
+                if (pCR)
+                    return -RS400;
+                pCR = req->p_newline + i;
+            }
+            else if (ch == '\n')// found LF
+            {
+                pLF = req->p_newline + i;
+                if ((pCR) && ((pLF - pCR) != 1))
+                    return -RS400;
+                i++;
+                break;
+            }
+            else
+                len_line++;
+            i++;
+        }
+
+        if (pLF) // found end of line '\n'
+        {
+            if (pCR == NULL)
+                *pLF = 0;
+            else
+                *pCR = 0;
+
+            if (len_line == 0) // found empty line
+            {
+                if (req->countReqHeaders == 0) // empty lines before Starting Line
+                {
+                    if ((pLF - req->bufReq + 1) > 4) // more than two empty lines
+                        return -RS400;
+                    req->lenTail -= i;
+                    req->p_newline = pLF + 1;
+                    continue;
+                }
+
+                if (req->lenTail > 0) // tail after empty line (Message Body for POST method)
+                {
+                    req->tail = pLF + 1;
+                    req->lenTail -= i;
+                }
+                else
+                    req->tail = NULL;
+                return 1;
+            }
+
+            if (req->countReqHeaders < MAX_HEADERS)
+            {
+                req->reqHeadersName[req->countReqHeaders] = req->p_newline;
+                if (req->countReqHeaders == 0)
+                {
+                    int ret = parse_startline_request(req, req->reqHeadersName[0]);
+                    if (ret < 0)
+                        return ret;
+                }
+                req->countReqHeaders++;
+            }
+            else
+                return -RS500;
+
+            req->lenTail -= i;
+            req->p_newline = pLF + 1;
+        }
+        else if (pCR && (!pLF))
+            return -RS400;
+        else
+            break;
+    }
+
+    return 0;
+}
+//======================================================================
+void init_struct_request(Connect *req)
+{
+    req->bufReq[0] = '\0';
+    req->decodeUri[0] = '\0';
+    req->sLogTime[0] = '\0';
+    req->uri = NULL;
+    req->p_newline = req->bufReq;
+    req->sReqParam = NULL;
+    req->reqHeadersName[0] = NULL;
+    req->reqHeadersValue[0] = NULL;
+    req->lenBufReq = 0;
+    req->lenTail = 0;
+    req->reqMethod = 0;
+    req->uriLen = 0;
+    req->lenDecodeUri = 0;
+    req->httpProt = 0;
+    req->connKeepAlive = 0;
+    req->err = 0;
+    req->req_hd = (ReqHd){-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1LL};
+    req->countReqHeaders = 0;
+    req->cgi_type = NO_CGI;
+    req->fileSize = -1LL;
+    req->respStatus = 0;
+    req->respContentLength = -1LL;
+    req->respContentType = NULL;
+    req->countRespHeaders = 0;
+    req->send_bytes = 0LL;
+    req->numPart = 0;
+    req->sRange = NULL;
+    req->rangeBytes = NULL;
+    req->fd = -1;
+    req->offset = 0;
+    
+    req->mode_send = NO_CHUNK;
+    req->fcgi.size_par = req->fcgi.i_param = 0;
+}
+//======================================================================
+void init_strings_request(Connect *r)
+{
+    StrInit(&r->resp_headers);
+    StrInit(&r->hdrs);
+    StrInit(&r->msg);
+    StrInit(&r->html);
+    StrInit(&r->scriptName);
+    StrInit(&r->path);
+}
+//======================================================================
+void free_strings_request(Connect *r)
+{
+    StrFree(&r->resp_headers);
+    StrFree(&r->hdrs);
+    StrFree(&r->msg);
+    StrFree(&r->html);
+    StrFree(&r->scriptName);
+    StrFree(&r->path);
 }

@@ -41,15 +41,29 @@
 
 #define    MAX_PATH           4096
 #define    MAX_NAME            256
-#define    SIZE_BUF_REQUEST    8192
+#define    SIZE_BUF_REQUEST   8192
 #define    MAX_HEADERS          25
-#define    NO_PRINT_LOG      -1000
+#define    PROC_LIMIT            8
+#define    ERR_TRY_AGAIN     -1000
+#define    CGI_BUF_SIZE       4096
+#define    FCGI_BUF_SIZE      2048
+
+extern const char *boundary;
+
+enum CGI_TYPE { NO_CGI, CGI, PHPCGI, PHPFPM, FASTCGI, SCGI, };
 
 typedef struct fcgi_list_addr {
     char *script_name;
     char *addr;
+    enum CGI_TYPE type;
     struct fcgi_list_addr *next;
 } fcgi_list_addr;
+
+typedef struct
+{
+    char *name;
+    char *val;
+} Param;
 
 enum {
     RS101 = 101,
@@ -67,13 +81,31 @@ enum {
 
 enum { HTTP09 = 1, HTTP10, HTTP11, HTTP2 };
 
-enum {CGI_, PHP_};
-enum { cgi_ex = 1, php_cgi, php_fpm, fast_cgi};
+enum { false, true };
 
-enum { EXIT_THR = 1};
+enum MODE_SEND { NO_CHUNK, CHUNK, CHUNK_END };
+enum SOURCE_ENTITY { NO_ENTITY, FROM_FILE, FROM_DATA_BUFFER, MULTIPART_ENTITY, };
+enum OPERATION_TYPE { READ_REQUEST = 1, SEND_RESP_HEADERS, SEND_ENTITY, DYN_PAGE, };
+enum MULTIPART { SEND_HEADERS = 1, SEND_PART, SEND_END };
+enum IO_STATUS { POLL = 1, WORK };
+
+enum DIRECT { FROM_CGI = 1, TO_CGI, FROM_CLIENT, TO_CLIENT };
+
+enum FCGI_OPERATION { FASTCGI_CONNECT = 1, FASTCGI_BEGIN, FASTCGI_PARAMS, FASTCGI_STDIN, 
+                      FASTCGI_READ_HTTP_HEADERS, FASTCGI_SEND_HTTP_HEADERS, 
+                      FASTCGI_SEND_ENTITY, FASTCGI_READ_ERROR, FASTCGI_CLOSE };
+
+
+enum FCGI_STATUS {FCGI_READ_DATA = 1,  FCGI_READ_HEADER, FCGI_READ_PADDING }; 
+
+enum CGI_OPERATION { CGI_CREATE_PROC = 1, CGI_STDIN, CGI_READ_HTTP_HEADERS, CGI_SEND_HTTP_HEADERS, CGI_SEND_ENTITY };
+
+enum SCGI_OPERATION { SCGI_CONNECT = 1, SCGI_PARAMS, SCGI_STDIN, SCGI_READ_HTTP_HEADERS, SCGI_SEND_HTTP_HEADERS, SCGI_SEND_ENTITY };
+
 //----------------------------------------------------------------------
 typedef struct {
     unsigned int len;
+    unsigned int ind;
     unsigned int size;
     int err;
     char *ptr;
@@ -84,6 +116,8 @@ typedef struct {
     long long end;
     long long len;
 } Range;
+//----------------------------------------------------------------------
+union OPERATION { enum CGI_OPERATION cgi; enum FCGI_OPERATION fcgi; enum SCGI_OPERATION scgi;};
 //======================================================================
 typedef struct Config
 {
@@ -103,19 +137,15 @@ typedef struct Config
     char TcpCork;
     char TcpNoDelay;
 
-    //int SockDgramBufSize;
-
     char SendFile;
     int SndBufSize;
 
-    unsigned int NumCpuCores;
-
     int MaxWorkConnections;
-    int MaxEventConnections;
+
+    char BalancedLoad;
 
     unsigned int NumProc;
-    unsigned int MaxThreads;
-    unsigned int MinThreads;
+    unsigned int NumThreads;
     unsigned int MaxCgiProc;
 
     int MaxRequestsPerClient;
@@ -172,6 +202,8 @@ typedef struct Connect{
     time_t sock_timer;
     int  timeout;
     int  event;
+    enum OPERATION_TYPE operation;
+    enum IO_STATUS    io_status;
 
     int  err;
     char remoteAddr[64];
@@ -191,6 +223,13 @@ typedef struct Connect{
     char decodeUri[SIZE_BUF_REQUEST];
     unsigned int lenDecodeUri;
     //------------------------------------------------------------------
+    String resp_headers;
+    String hdrs;
+    String html;
+    String msg;
+    String scriptName;
+    String path;
+
     char *sReqParam;
     char *sRange;
     int  httpProt;
@@ -203,10 +242,40 @@ typedef struct Connect{
     char *reqHeadersName[MAX_HEADERS + 1];
     const char *reqHeadersValue[MAX_HEADERS + 1];
 
-    String scriptName;
-    String path;
+    enum CGI_TYPE cgi_type;
+    char cgi_buf[8 + CGI_BUF_SIZE + 8];
+    struct
+    {
+        union OPERATION op;
+        enum DIRECT dir;
+        long len_buf;
+        long len_post;
+        char *p;
+    
+        pid_t pid;
+        int  to_script;
+        int  from_script;
+    } cgi;
+    
+    struct
+    {
+        int http_headers_received;
+        enum FCGI_STATUS status;
+        int fd;
 
-    int  scriptType;
+        int i_param;
+        int size_par;
+        Param vPar[32];
+
+        unsigned char fcgi_type;
+        int dataLen;
+        int paddingLen;
+        char *ptr_wr;
+        char *ptr_rd;
+        char buf[FCGI_BUF_SIZE + 8];
+        int len_buf;
+    } fcgi;
+
     int  respStatus;
     char sLogTime[64];
 
@@ -216,8 +285,13 @@ typedef struct Connect{
 
     int  countRespHeaders;
 
+    enum SOURCE_ENTITY source_entity;
+    enum MODE_SEND mode_send;
+
     Range *rangeBytes;
+    enum MULTIPART mp_status;
     int  numPart;
+    int  indPart;
 
     int  fd;
     off_t offset;
@@ -238,33 +312,22 @@ typedef struct {
 
 extern char **environ;
 //----------------------------------------------------------------------
+int create_multipart_head(Connect *r);
 int response(Connect *req);
 int options(Connect *req);
-int cgi(Connect *req);
-int fcgi(Connect *req);
-void init_struct_request(Connect *req);
 //----------------------------------------------------------------------
-int create_client_socket(const char *host);
+int create_fcgi_socket(Connect *r, const char *host);
+int read_request_headers(Connect *r);
+int write_to_client(Connect *r, const char *buf, int len);
+int read_from_client(Connect *r, char *buf, int len);
+int send_fd(int unix_sock, int fd, void *data, int size_data);
+int recv_fd(int unix_sock, int num_chld, void *data, int *size_data);
 //----------------------------------------------------------------------
 int encode(const char *s_in, char *s_out, int len_out);
 int decode(const char *s_in, int len_in, char *s_out, int len_out);
 //----------------------------------------------------------------------
-int read_timeout(int fd, char *buf, int len, int timeout);
-int write_timeout(int sock, const char *buf, int len, int timeout);
-int client_to_script(int fd_in, int fd_out, long long *cont_len, int n);
-long cgi_to_cosmos(int fd_in, int timeout);
-long fcgi_to_cosmos(int fd_in, int size, int timeout);
-int fcgi_read_padding(int fd_in, long len, int timeout);
-int fcgi_read_to_stderr(int fd_in, int cont_len, int timeout);
-int send_file_ux(int fd_out, int fd_in, char *buf, int *size, off_t offset, long long *cont_len);
-
-int hd_read(Connect *req);
-
-int send_fd(int unix_sock, int fd, void *data, int size_data);
-int recv_fd(int unix_sock, int num_chld, void *data, int *size_data);
-//----------------------------------------------------------------------
-void send_message(Connect *req, String *hdrs, const char *msg);
-int send_response_headers(Connect *req, String *hdrs);
+int create_response_headers(Connect *req);
+int create_message(Connect *req, const char *msg);
 const char *status_resp(int st);
 //----------------------------------------------------------------------
 int get_time(char *s, int size_buf);
@@ -278,12 +341,24 @@ const char *get_str_method(int i);
 int get_int_http_prot(char *s);
 const char *get_str_http_prot(int i);
 
+const char *get_str_operation(enum OPERATION_TYPE n);
+const char *get_cgi_operation(enum CGI_OPERATION n);
+const char *get_fcgi_operation(enum FCGI_OPERATION n);
+const char *get_fcgi_status(enum FCGI_STATUS n);
+const char *get_scgi_operation(enum SCGI_OPERATION n);
+const char *get_cgi_type(enum CGI_TYPE n);
+const char *get_cgi_dir(enum DIRECT n);
+
 int str_num(const char *s);
 int clean_path(char *path);
 char *content_type(const char *s);
 const char *base_name(const char *path);
 int parse_startline_request(Connect *req, char *s);
 int parse_headers(Connect *req, char *s, int i);
+int find_empty_line(Connect *req);
+void init_struct_request(Connect *req);
+void init_strings_request(Connect *r);
+void free_strings_request(Connect *r);
 //----------------------------------------------------------------------
 void close_logs(void);
 void print(const char *format, ...);
@@ -291,36 +366,27 @@ void print_err(const char *format, ...);
 void print__err(Connect *req, const char *format, ...);
 void print_log(Connect *req);
 //----------------------------------------------------------------------
-int exit_thr(void);
 void close_req(void);
 void push_resp_list(Connect *req);
 Connect *pop_resp_list(void);
 void end_response(Connect *req);
 void free_range(Connect *r);
-int end_thr(int);
-void free_req(Connect *req);
 //----------------------------------------------------------------------
-int timedwait_close_cgi(void);
-void cgi_dec();
-//----------------------------------------------------------------------
-void chunk_add_longlong(chunked *chk, long long ll);
-void va_chunk_add_str(chunked *chk, int numArg, ...);
-void chunk_add_arr(chunked *chk, char *s, int len);
-void chunk_end(chunked *chk);
-int cgi_to_client(chunked *chk, int fdPipe);
-int fcgi_to_client(chunked *chk, int fdPipe, int len);
-//----------------------------------------------------------------------
-String str_init(unsigned int n);
-void str_free(String *s);
-void str_reserve(String *s, unsigned int n);
-void str_resize(String *s, unsigned int n);
-void str_cpy(String *s, const char *cs);
-void str_cat(String *s, const char *cs);
-void str_cat_ln(String *s, const char *cs);
-void str_llint(String *s, long long ll);
-void str_llint_ln(String *s, long long ll);
-const char *str_ptr(String *s);
-int str_len(String *s);
+void StrInit(String *s);
+void StrFree(String *s);
+void StrClear(String *s);
+void StrReserve(String *s, unsigned int n);
+void StrResize(String *s, unsigned int n);
+int StrLen(String *s);
+int StrSize(String *s);
+const char *StrPtr(String *s);
+void StrCpy(String *s, const char *cs);
+void StrCpyLN(String *s, const char *cs);
+void StrCat(String *s, const char *cs);
+void StrCatLN(String *s, const char *cs);
+void StrnCat(String *s, const char *cs, unsigned int len);
+void StrCatInt(String *s, long long ll);
+void StrCatIntLN(String *s, long long ll);
 //----------------------------------------------------------------------
 void free_fcgi_list();
 void set_max_conn(int n);
@@ -328,9 +394,16 @@ long get_lim_max_fd(long *max, long *cur);
 int set_max_fd(int min_open_fd);
 //----------------------------------------------------------------------
 void *event_handler(void *arg);
-void push_pollout_list(Connect *req);
+void push_send_file(Connect *req);
+void push_send_multipart(Connect *r);
+void push_send_html(Connect *r);
 void push_pollin_list(Connect *req);
-void close_event_handler(void);
+void close_event_handler();
+//----------------------------------------------------------------------
+void push_cgi(Connect *r);
+void *cgi_handler(void *arg);
+void close_cgi_handler();
+void free_fcgi_param(Connect *r);
 //----------------------------------------------------------------------
 void close_manager();
 

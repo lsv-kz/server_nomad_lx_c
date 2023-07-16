@@ -10,13 +10,12 @@ void create_logfiles(const char *log_dir);
 int set_uid();
 int main_proc();
 
-static int from_chld[2], unixFD[8][2];
-static pid_t pidArr[8];
-static int numConn[8];
+static pid_t pidChild[PROC_LIMIT];
+static int from_chld[2], unixFD[PROC_LIMIT][2];
+static int numConn[PROC_LIMIT];
 static char conf_dir[512];
-static int start = 0, restart = 1;
+static int startServer = 0, restartServer = 1;
 static int close_chld_proc = 0;
-
 static unsigned int all_conn = 0;
 
 static char pidFile[MAX_PATH];
@@ -38,7 +37,7 @@ static void signal_handler(int sig)
 
         for (unsigned int i = 0; i < conf->NumProc; ++i)
         {
-            if (kill(pidArr[i], SIGKILL) < 0)
+            if (kill(pidChild[i], SIGKILL) < 0)
                 fprintf(stderr, "<%s> Error kill(): %s\n", __func__, strerror(errno));
         }
 
@@ -57,7 +56,7 @@ static void signal_handler(int sig)
 
         for (unsigned int i = 0; i < conf->NumProc; ++i)
         {
-            if (kill(pidArr[i], SIGKILL) < 0)
+            if (kill(pidChild[i], SIGKILL) < 0)
                 fprintf(stderr, "<%s> Error kill(): %s\n", __func__, strerror(errno));
         }
 
@@ -71,7 +70,7 @@ static void signal_handler(int sig)
     else if (sig == SIGUSR1)
     {
         fprintf(stderr, "<%s> ###### SIGUSR1 ######\n", __func__);
-        restart = 1;
+        restartServer = 1;
         close_chld_proc = 1;
     }
     else if (sig == SIGUSR2)
@@ -109,17 +108,16 @@ void create_proc(int NumProc)
     else
         sndbuf = 163840;
 
-    pid_t pid_child;
     int i = 0;
     while (i < NumProc)
     {
-        pid_child = create_child(i, from_chld, sndbuf);
-        if (pid_child < 0)
+        pidChild[i] = create_child(i, from_chld, sndbuf);
+        if (pidChild[i] < 0)
         {
             fprintf(stderr, "<%s:%d> Error create_child() %d\n", __func__, __LINE__, i);
             exit(1);
         }
-        pidArr[i] = pid_child;
+
         ++i;
     }
 
@@ -128,7 +126,7 @@ void create_proc(int NumProc)
 //======================================================================
 void print_help(const char *name)
 {
-    fprintf(stderr, "Usage: %s [-l] [-c configfile] [-s signal]\n"
+    fprintf(stderr, "Usage: %s [-h] [-p] [-c configfile] [-s signal]\n"
                     "Options:\n"
                     "   -h              : help\n"
                     "   -p              : print parameters\n"
@@ -142,32 +140,32 @@ void print_limits()
     if (getrlimit(RLIMIT_NOFILE, &lim) == -1)
         fprintf(stderr, " Error getrlimit(RLIMIT_NOFILE): %s\n", strerror(errno));
     else
-        fprintf(stderr, " RLIMIT_NOFILE: cur=%ld, max=%ld\n", (long)lim.rlim_cur, (long)lim.rlim_max);
-    fprintf(stderr, " SC_NPROCESSORS_ONLN: %ld\n\n", sysconf(_SC_NPROCESSORS_ONLN));
+        fprintf(stdout, " RLIMIT_NOFILE: cur=%ld, max=%ld\n", (long)lim.rlim_cur, (long)lim.rlim_max);
+    fprintf(stdout, " SC_NPROCESSORS_ONLN: %ld\n\n", sysconf(_SC_NPROCESSORS_ONLN));
     //------------------------------------------------------------------
     int sbuf = get_sock_buf(AF_INET, SO_SNDBUF, SOCK_STREAM, 0);
     if (sbuf < 0)
         fprintf(stderr, " Error get_sock_buf(AF_INET, SOCK_STREAM, 0): %s\n", strerror(-sbuf));
     else
-        fprintf(stderr, " AF_INET: SO_SNDBUF=%d\n", sbuf);
+        fprintf(stdout, " AF_INET: SO_SNDBUF=%d\n", sbuf);
 
     sbuf = get_sock_buf(AF_INET, SO_RCVBUF, SOCK_STREAM, 0);
     if (sbuf < 0)
         fprintf(stderr, " Error get_sock_buf(AF_INET, SOCK_STREAM, 0): %s\n", strerror(-sbuf));
     else
-        fprintf(stderr, " AF_INET: SO_RCVBUF=%d\n\n", sbuf);
+        fprintf(stdout, " AF_INET: SO_RCVBUF=%d\n\n", sbuf);
     //------------------------------------------------------------------
     sbuf = get_sock_buf(AF_UNIX, SO_SNDBUF, SOCK_DGRAM, 0);
     if (sbuf < 0)
         fprintf(stderr, " Error get_sock_buf(AF_UNIX, SOCK_DGRAM, 0): %s\n\n", strerror(-sbuf));
     else
-        fprintf(stderr, " AF_UNIX: SO_SNDBUF=%d\n", sbuf);
+        fprintf(stdout, " AF_UNIX: SO_SNDBUF=%d\n", sbuf);
 
     sbuf = get_sock_buf(AF_UNIX, SO_RCVBUF, SOCK_DGRAM, 0);
     if (sbuf < 0)
         fprintf(stderr, " Error get_sock_buf(AF_UNIX, SOCK_DGRAM, 0): %s\n\n", strerror(-sbuf));
     else
-        fprintf(stderr, " AF_UNIX: SO_RCVBUF=%d\n\n", sbuf);
+        fprintf(stdout, " AF_UNIX: SO_RCVBUF=%d\n\n", sbuf);
 }
 //======================================================================
 void print_config()
@@ -184,14 +182,12 @@ void print_config()
                 "   SendFile                     : %c\n"
                 "   SndBufSize                   : %d\n\n"
 
-                "   NumCpuCores                  : %d\n"
+                "   MaxWorkConnections           : %d\n\n"
 
-                "   MaxWorkConnections           : %d\n"
-                "   MaxEventConnections          : %d\n\n"
+                "   BalancedLoad                 : %c\n\n"
 
                 "   NumProc                      : %d\n"
-                "   MaxThreads                   : %d\n"
-                "   MimThreads                   : %d\n"
+                "   NumThreads                   : %d\n"
                 "   MaxCgiProc                   : %d\n\n"
 
                 "   TimeoutKeepAlive             : %d\n"
@@ -212,8 +208,8 @@ void print_config()
                 "   index.pl                     : %c\n"
                 "   index.fcgi                   : %c\n",
                 conf->ServerSoftware, conf->ServerAddr, conf->ServerPort, conf->ListenBacklog, conf->TcpCork, conf->TcpNoDelay,
-                conf->SendFile, conf->SndBufSize, conf->NumCpuCores,
-                conf->MaxWorkConnections, conf->MaxEventConnections, conf->NumProc, conf->MaxThreads, conf->MinThreads, conf->MaxCgiProc,
+                conf->SendFile, conf->SndBufSize, conf->MaxWorkConnections,
+                conf->BalancedLoad, conf->NumProc, conf->NumThreads, conf->MaxCgiProc,
                 conf->TimeoutKeepAlive, conf->Timeout, conf->TimeoutCGI, conf->TimeoutPoll,
                 conf->MaxRanges, conf->UsePHP, conf->PathPHP, conf->ShowMediaFiles, conf->ClientMaxBodySize,
                 conf->index_html, conf->index_php, conf->index_pl, conf->index_fcgi);
@@ -235,17 +231,16 @@ int main(int argc, char *argv[])
     else
     {
         int c, arg_print = 0;
-        pid_t pid_ = 0;
-        char *sig = NULL, *conf_dir_ = NULL;
+        char *s_arg = NULL, *c_arg = NULL;
         while ((c = getopt(argc, argv, "c:s:h:p")) != -1)
         {
             switch (c)
             {
                 case 'c':
-                    conf_dir_ = optarg;
+                    c_arg = optarg;
                     break;
                 case 's':
-                    sig = optarg;
+                    s_arg = optarg;
                     break;
                 case 'h':
                     print_help(argv[0]);
@@ -259,8 +254,8 @@ int main(int argc, char *argv[])
             }
         }
 
-        if (conf_dir_)
-            snprintf(conf_dir, sizeof(conf_dir), "%s", conf_dir_);
+        if (c_arg)
+            snprintf(conf_dir, sizeof(conf_dir), "%s", c_arg);
         else
             snprintf(conf_dir, sizeof(conf_dir), "%s", "server.conf");
 
@@ -272,18 +267,18 @@ int main(int argc, char *argv[])
             return 0;
         }
 
-        if (sig)
+        if (s_arg)
         {
             int sig_send;
-            if (!strcmp(sig, "restart"))
+            if (!strcmp(s_arg, "restart"))
                 sig_send = SIGUSR1;
-            else if (!strcmp(sig, "close"))
+            else if (!strcmp(s_arg, "close"))
                 sig_send = SIGUSR2;
-            else if (!strcmp(sig, "abort"))
+            else if (!strcmp(s_arg, "abort"))
                 sig_send = SIGTERM;
             else
             {
-                fprintf(stderr, "<%d> ? option -s: %s\n", __LINE__, sig);
+                fprintf(stderr, "<%d> ? option -s: %s\n", __LINE__, s_arg);
                 print_help(argv[0]);
                 return 1;
             }
@@ -298,12 +293,13 @@ int main(int argc, char *argv[])
                 return 1;
             }
 
-            fscanf(fpid, "%u", &pid_);
+            pid_t pid;
+            fscanf(fpid, "%u", &pid);
             fclose(fpid);
 
-            if (kill(pid_, sig_send))
+            if (kill(pid, sig_send))
             {
-                fprintf(stderr, "<%d> Error kill(pid=%u, sig=%u): %s\n", __LINE__, pid_, sig_send, strerror(errno));
+                fprintf(stderr, "<%d> Error kill(pid=%u, sig=%u): %s\n", __LINE__, pid, sig_send, strerror(errno));
                 return 1;
             }
 
@@ -311,9 +307,9 @@ int main(int argc, char *argv[])
         }
     }
 
-    while (restart)
+    while (restartServer)
     {
-        restart = 0;
+        restartServer = 0;
 
         if (read_conf_file(conf_dir))
             return 1;
@@ -327,9 +323,9 @@ int main(int argc, char *argv[])
             exit(1);
         }
         //--------------------------------------------------------------
-        if (start == 0)
+        if (startServer == 0)
         {
-            start = 1;
+            startServer = 1;
             snprintf(pidFile, sizeof(pidFile), "%s/pid.txt", conf->PidFilePath);
             FILE *fpid = fopen(pidFile, "w");
             if (!fpid)
@@ -380,7 +376,7 @@ int main(int argc, char *argv[])
             break;
     }
 
-    if (start == 1)
+    if (startServer == 1)
         remove(pidFile);
     return 0;
 }
@@ -407,9 +403,10 @@ int main_proc()
     create_proc(conf->NumProc);
     fprintf(stdout, "  pid=%u, uid=%u, gid=%u\n\n", pid, getuid(), getgid());
     fprintf(stderr, "  pid=%u, uid=%u, gid=%u\n", pid, getuid(), getgid());
-    fprintf(stderr, "  NumCpuCores: %u, MaxWorkConnections: %d\n"
-                    "  SndBufSize: %d, MaxEventConnections: %d\n", conf->NumCpuCores, conf->MaxWorkConnections,
-                             conf->SndBufSize, conf->MaxEventConnections);
+    fprintf(stderr, "  MaxWorkConnections: %d\n"
+                    "  BalancedLoad: %c\n"
+                    "  SndBufSize: %d\n", conf->MaxWorkConnections, conf->BalancedLoad,
+                             conf->SndBufSize);
     //------------------------------------------------------------------
     int sndbuf;
     socklen_t optlen = sizeof(sndbuf);
@@ -429,7 +426,7 @@ int main_proc()
 
     close_chld_proc = 0;
 
-    unsigned int num_fdrd = 2, i_proc = 0;
+    unsigned int numFD = 2, indexProc = 0;
 
     while (1)
     {
@@ -437,43 +434,40 @@ int main_proc()
         {
             if (all_conn == 0)
                 break;
-            num_fdrd = 1;
+            numFD = 1;
         }
         else
         {
-            if (conf->NumCpuCores == 1)
-                i_proc = 0;
+            if (conf->BalancedLoad == 'y')
+            {
+                indexProc++;
+                if (indexProc >= conf->NumProc)
+                    indexProc = 0;
+            }
             else
-            {
-                i_proc++;
-                if (i_proc >= conf->NumProc)
-                    i_proc = 0;
-            }
+                indexProc = 0;
 
-            for (unsigned int i = i_proc; ; )
+            for (unsigned int i = indexProc; ; )
             {
-                if (numConn[i_proc] < conf->MaxWorkConnections)
+                if (numConn[indexProc] < conf->MaxWorkConnections)
                 {
-                    num_fdrd = 2;
+                    numFD = 2;
                     break;
                 }
 
-                i_proc++;
-                if (i_proc >= conf->NumProc)
-                    i_proc = 0;
+                indexProc++;
+                if (indexProc >= conf->NumProc)
+                    indexProc = 0;
 
-                if (i_proc == i)
+                if (indexProc == i)
                 {
-                    num_fdrd = 1;
+                    numFD = 1;
                     break;
                 }
             }
-
-            if (all_conn == 0)
-                num_fdrd = 2;
         }
 
-        int ret_poll = poll(fdrd, num_fdrd, -1);
+        int ret_poll = poll(fdrd, numFD, -1);
         if (ret_poll <= 0)
         {
             print_err("<%s:%d> Error poll()=-1: %s\n", __func__, __LINE__, strerror(errno));
@@ -509,21 +503,20 @@ int main_proc()
             }
 
             char data[1] = "";
-
-            int ret = send_fd(unixFD[i_proc][1], clientSock, data, sizeof(data));
+            int ret = send_fd(unixFD[indexProc][1], clientSock, data, sizeof(data));
             if (ret < 0)
             {
                 if (ret == -ENOBUFS)
-                    print_err("[%d]<%s:%d> Error send_fd: ENOBUFS\n", i_proc, __func__, __LINE__);
+                    print_err("[%d]<%s:%d> Error send_fd: ENOBUFS\n", indexProc, __func__, __LINE__);
                 else
                 {
-                    print_err("<%s:%d> Error send_fd()\n", __func__, __LINE__);
+                    print_err("[%d]<%s:%d> Error send_fd()\n", indexProc, __func__, __LINE__);
                     break;
                 }
             }
             else
             {
-                numConn[i_proc]++;
+                numConn[indexProc]++;
                 all_conn++;
             }
             close(clientSock);
@@ -545,9 +538,9 @@ int main_proc()
         if (ret < 0)
         {
             fprintf(stderr, "<%s:%d> Error send_fd()\n", __func__, __LINE__);
-            if (kill(pidArr[i], SIGKILL))
+            if (kill(pidChild[i], SIGKILL))
             {
-                fprintf(stderr, "<%s:%d> Error: kill(%u, %u)\n", __func__, __LINE__, pidArr[i], SIGKILL);
+                fprintf(stderr, "<%s:%d> Error: kill(%u, %u)\n", __func__, __LINE__, pidChild[i], SIGKILL);
             }
         }
         close(unixFD[i][1]);
@@ -562,7 +555,7 @@ int main_proc()
         fprintf(stderr, "<%s> wait() pid: %d\n", __func__, pid);
     }
 
-    if (restart == 0)
+    if (restartServer == 0)
         fprintf(stderr, "<%s> ***** Close *****\n", __func__);
     else
         fprintf(stderr, "<%s> ***** Reload *****\n", __func__);

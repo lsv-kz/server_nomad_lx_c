@@ -50,50 +50,24 @@ int cmp(const void *a, const void *b)
     return i;
 }
 //======================================================================
-int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
+int create_index_html(Connect *req, char **list, int numFiles)
 {
-    const int len_path = str_len(&req->path);
+    const int len_path = StrLen(&req->path);
     struct stat st;
-    int chunk;
-    if (req->reqMethod == M_HEAD)
-        chunk = NO_SEND;
-    else
-        chunk = ((req->httpProt == HTTP11) && req->connKeepAlive) ? SEND_CHUNK : SEND_NO_CHUNK;
-
-    chunked chk = {MAX_LEN_SIZE_CHUNK, chunk, 0, req->clientSocket};
 
     req->respStatus = RS200;
-    req->numPart = 0;
 
-    if (chunk == SEND_CHUNK)
-    {
-        str_cat(hdrs, "Transfer-Encoding: chunked\r\n");
-    }
-
-    str_cat(hdrs, "Content-Type: text/html\r\n");
+    StrCat(&req->hdrs, "Content-Type: text/html\r\n");
     req->respContentLength = -1;
 
-    if (chunk)
-    {
-        if (send_response_headers(req, hdrs))
-        {
-            print__err(req, "<%s:%d> Error send_header_response()\n", __func__, __LINE__);
-            return -1;
-        }
-    }
-
-    va_chunk_add_str(&chk, 2, "<!DOCTYPE HTML>\n"
+    StrCat(&req->html, "<!DOCTYPE HTML>\n"
         "<html>\n"
         " <head>\n"
         "  <meta charset=\"UTF-8\">\n"
-        "  <title>Index of ", req->decodeUri);
-    if (chk.err)
-    {
-        print_err("<%s:%d> Error chunk_add_str()\n", __func__, __LINE__);
-        return -1;
-    }
+        "  <title>Index of ");
+    StrCat(&req->html, req->decodeUri);
     //------------------------------------------------------------------
-    va_chunk_add_str(&chk, 3, "</title>\n"
+    StrCat(&req->html, "</title>\n"
         "  <style>\n"
         "    body {\n"
         "     margin-left:100px; margin-right:50px;\n"
@@ -102,40 +76,30 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
         "  <link href=\"/styles.css\" type=\"text/css\" rel=\"stylesheet\">\n"
         " </head>\n"
         " <body id=\"top\">\n"
-        "  <h3>Index of ",
-        req->decodeUri,
+        "  <h3>Index of ");
+    StrCat(&req->html, req->decodeUri);
+    StrCat(&req->html,
         "</h3>\n"
         "  <table cols=\"2\" width=\"100\%\">\n"
         "   <tr><td><h3>Directories</h3></td><td></td></tr>\n");
-
-    if (chk.err)
-    {
-        print_err("<%s:%d> Error va_chunk_add_str()\n", __func__, __LINE__);
-        return -1;
-    }
     //------------------------------------------------------------------
     if (!strcmp(req->decodeUri, "/"))
-        va_chunk_add_str(&chk, 1, "   <tr><td></td><td></td></tr>\n");
+        StrCat(&req->html, "   <tr><td></td><td></td></tr>\n");
     else
-        va_chunk_add_str(&chk, 1, "   <tr><td><a href=\"../\">Parent Directory/</a></td><td></td></tr>\n");
-    if (chk.err)
-    {
-        print_err("<%s:%d> Error va_chunk_add_str()\n", __func__, __LINE__);
-        return -1;
-    }
+        StrCat(&req->html, "   <tr><td><a href=\"../\">Parent Directory/</a></td><td></td></tr>\n");
     //-------------------------- Directories ---------------------------
     for (int i = 0; (i < numFiles); i++)
     {
         char buf[1024];
-        str_cat(&req->path, list[i]);
+        StrCat(&req->path, list[i]);
         if (req->path.err)
         {
             print__err(req, "<%s:%d> Error: Buffer Overflow: %s\n", __func__, __LINE__, list[i]);
             continue;
         }
 
-        int n = lstat(str_ptr(&req->path), &st);
-        str_resize(&req->path, len_path);
+        int n = lstat(req->path.ptr, &st);
+        StrResize(&req->path, len_path);
         if ((n == -1) || !S_ISDIR (st.st_mode))
             continue;
 
@@ -145,34 +109,29 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
             continue;
         }
 
-        va_chunk_add_str(&chk, 5, "   <tr><td><a href=\"", buf, "/\">", list[i], "/</a></td><td align=right></td></tr>\n");
-        if (chk.err)
-        {
-            print_err("<%s:%d> Error va_chunk_add_str()\n", __func__, __LINE__);
-            return -1;
-        }
+        StrCat(&req->html, "   <tr><td><a href=\"");
+        StrCat(&req->html, buf);
+        StrCat(&req->html, "/\">");
+        
+        StrCat(&req->html, list[i]);
+        StrCat(&req->html, "/</a></td><td align=right></td></tr>\n");
     }
 
-    va_chunk_add_str(&chk, 1, "   <tr><td><hr></td><td><hr></td></tr>\n"
+    StrCat(&req->html, "   <tr><td><hr></td><td><hr></td></tr>\n"
                 "   <tr><td><h3>Files</h3></td><td></td></tr>\n");
-    if (chk.err)
-    {
-        print_err("<%s:%d> Error va_chunk_add_str()\n", __func__, __LINE__);
-        return -1;
-    }
     //---------------------------- Files -------------------------------
     for (int i = 0; i < numFiles; i++)
     {
         char buf[1024];
-        str_cat(&req->path, list[i]);
+        StrCat(&req->path, list[i]);
         if (req->path.err)
         {
             print_err("<%s:%d> Error: Buffer Overflow: %s\n", __func__, __LINE__, list[i]);
             continue;
         }
 
-        int n = lstat(str_ptr(&req->path), &st);
-        str_resize(&req->path, len_path);
+        int n = lstat(req->path.ptr, &st);
+        StrResize(&req->path, len_path);
         if ((n == -1) || (!S_ISREG (st.st_mode)))
             continue;
 
@@ -186,63 +145,46 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
 
         if (isimage(list[i]) && (conf->ShowMediaFiles == 'y'))
         {
-            if (size < 8000LL)
-            {
-                va_chunk_add_str(&chk, 7, "   <tr><td><a href=\"", buf, "\"><img src=\"", buf, "\"></a><br>",
-                                                list[i], "</td><td align=\"right\">");
-                chunk_add_longlong(&chk, size);
-                va_chunk_add_str(&chk, 1, " bytes</td></tr>\n   <tr><td></td><td></td></tr>\n");
-
-                if (chk.err)
-                {
-                    print_err("<%s:%d> Error chunk_add_str()\n", __func__, __LINE__);
-                    return -1;
-                }
-            }
-            else
-            {
-                va_chunk_add_str(&chk, 7, "   <tr><td><a href=\"", buf, "\"><img src=\"", buf, "\" width=\"300\"></a><br>",
-                                        list[i], "</td><td align=\"right\">");
-                chunk_add_longlong(&chk, size);
-                va_chunk_add_str(&chk, 1, " bytes</td></tr>\n   <tr><td></td><td></td></tr>\n");
-
-                if (chk.err)
-                {
-                    print_err("<%s:%d> Error chunk_add_str()\n", __func__, __LINE__);
-                    return -1;
-                }
-            }
+            StrCat(&req->html, "   <tr><td><a href=\"");
+            StrCat(&req->html, buf);
+            StrCat(&req->html, "\"><img src=\"");
+            StrCat(&req->html, buf);
+            StrCat(&req->html, "\" width=\"100\"></a><br>");
+            
+            StrCat(&req->html, list[i]);
+            StrCat(&req->html, "</td><td align=\"right\">");
+            StrCatInt(&req->html, size);
+            StrCat(&req->html, " bytes</td></tr>\n   <tr><td></td><td></td></tr>\n");
         }
         else if (isaudiofile(list[i]) && (conf->ShowMediaFiles == 'y'))
         {
-            va_chunk_add_str(&chk, 7, "   <tr><td><audio preload=\"none\" controls src=\"", buf,
-                                "\"></audio><a href=\"", buf, "\">", list[i], "</a></td><td align=\"right\">");
-            chunk_add_longlong(&chk, size);
-            va_chunk_add_str(&chk, 1, " bytes</td></tr>\n");
-            if (chk.err)
-            {
-                print_err("<%s:%d> Error chunk_add_str()\n", __func__, __LINE__);
-                return -1;
-            }
+            StrCat(&req->html, "   <tr><td><audio preload=\"none\" controls src=\"");
+            StrCat(&req->html, buf);
+            StrCat(&req->html, "\"></audio><a href=\"");
+            StrCat(&req->html, buf);
+            StrCat(&req->html, "\">");
+            StrCat(&req->html, list[i]);
+            StrCat(&req->html, "</a></td><td align=\"right\">");
+            StrCatInt(&req->html, size);
+            StrCat(&req->html, " bytes</td></tr>\n");
         }
         else
         {
-            va_chunk_add_str(&chk, 5, "   <tr><td><a href=\"", buf, "\">", list[i], "</a></td><td align=\"right\">");
-            chunk_add_longlong(&chk, size);
-            va_chunk_add_str(&chk, 1, " bytes</td></tr>\n");
-
-            if (chk.err)
-            {
-                print_err("<%s:%d> Error va_chunk_add_str()\n", __func__, __LINE__);
-                return -1;
-            }
+            StrCat(&req->html, "   <tr><td><a href=\"");
+            StrCat(&req->html, buf);
+            StrCat(&req->html, "\">");
+            StrCat(&req->html, list[i]);
+            StrCat(&req->html, "</a></td><td align=\"right\">");
+            StrCatInt(&req->html, size);
+            StrCat(&req->html, " bytes</td></tr>\n");
         }
     }
     //------------------------------------------------------------------
-    va_chunk_add_str(&chk, 3,
+    StrCat(&req->html, 
             "  </table>\n"
-            "  <hr>\n  ",
-            req->sLogTime,
+            "  <hr>\n  ");
+    StrCat(&req->html, req->sLogTime);
+    StrCat(&req->html,
             "\n  <a href=\"#top\" style=\"display:block;\n"
             "         position:fixed;\n"
             "         bottom:30px;\n"
@@ -256,30 +198,13 @@ int index_chunked(Connect *req, String *hdrs, char **list, int numFiles)
             "         opacity: 0.7\">^</a>\n"
             " </body>\n"
             "</html>");
-    if (chk.err)
+    if (req->html.err)
     {
-        print_err("<%s:%d> Error va_chunk_add_str()\n", __func__, __LINE__);
+        print_err("<%s:%d> Error create_index_html()\n", __func__, __LINE__);
         return -1;
     }
 
-    chunk_end(&chk);
-    req->respContentLength = chk.allSend;
-    if (chk.err)
-    {
-        print_err("<%s:%d> Error chunk_add_str()\n", __func__, __LINE__);
-        return -1;
-    }
-
-    if (chunk == NO_SEND)
-    {
-        if (send_response_headers(req, hdrs))
-        {
-            print_err("<%s:%d> Error send_header_response()\n", __func__, __LINE__);
-            return -1;
-        }
-    }
-    else
-        req->send_bytes = req->respContentLength;
+    req->respContentLength = req->html.len;
 
     return 0;
 }
@@ -295,14 +220,21 @@ int read_dir(Connect *req)
     if (req->reqMethod == M_POST)
         return -RS405;
 
-    dir = opendir(str_ptr(&req->path));
+    StrReserve(&req->hdrs, 200);
+    if (req->hdrs.err)
+    {
+        print__err(req, "<%s:%d> Error: malloc()\n", __func__, __LINE__);
+        return -1;
+    }
+
+    dir = opendir(req->path.ptr);
     if (dir == NULL)
     {
         if (errno == EACCES)
             return -RS403;
         else
         {
-            print__err(req, "<%s:%d> Error opendir(\"%s\"): %s\n", __func__, __LINE__, str_ptr(&req->path), strerror(errno));
+            print__err(req, "<%s:%d> Error opendir(\"%s\"): %s\n", __func__, __LINE__, req->path.ptr, strerror(errno));
             return -RS500;
         }
     }
@@ -322,19 +254,19 @@ int read_dir(Connect *req)
     }
 
     qsort(list, numFiles, sizeof(char *), cmp);
-    String hdrs = str_init(200);
-    if (hdrs.err == 0)
-    {
-        ret = index_chunked(req, &hdrs, list, numFiles);
-        str_free(&hdrs);
-    }
-    else
-    {
-        print__err(req, "<%s:%d> Error: malloc()\n", __func__, __LINE__);
-        ret = -1;
-    }
-
+    ret = create_index_html(req, list, numFiles);
     closedir(dir);
+    if (ret >= 0)
+    {
+        if (create_response_headers(req))
+        {
+            print__err(req, "<%s:%d> Error create_response_headers()\n", __func__, __LINE__);
+            return -1;
+        }
+        
+        push_send_html(req);
+        return 1;
+    }
 
     return ret;
 }

@@ -11,8 +11,8 @@ pthread_cond_t cond_exit_thr = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t mtx_conn = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond_close_conn = PTHREAD_COND_INITIALIZER;
 
-static int count_thr = 0, count_conn = 0, size_list = 0, all_thr = 0, num_wait_thr = 0, all_req = 0;
-int stop_manager = 0, need_create_thr = 0;
+static int count_conn = 0, all_req = 0;
+int stop_manager = 0;
 
 int get_num_cgi();
 
@@ -21,19 +21,6 @@ static int nProc;
 int get_num_chld(void)
 {
     return nProc;
-}
-//======================================================================
-int get_num_thr(void)
-{
-pthread_mutex_lock(&mtx_thr);
-    int ret = count_thr;
-pthread_mutex_unlock(&mtx_thr);
-    return ret;
-}
-//======================================================================
-int get_all_thr(void)
-{
-    return all_thr;
 }
 //======================================================================
 int get_num_conn(void)
@@ -51,24 +38,6 @@ pthread_mutex_lock(&mtx_conn);
 pthread_mutex_unlock(&mtx_conn);
 }
 //======================================================================
-int start_thr(void)
-{
-pthread_mutex_lock(&mtx_thr);
-    int ret = ++count_thr;
-pthread_mutex_unlock(&mtx_thr);
-    return ret;
-}
-//======================================================================
-void wait_exit_thr(int n)
-{
-pthread_mutex_lock(&mtx_thr);
-    while (n == count_thr)
-    {
-        pthread_cond_wait(&cond_exit_thr, &mtx_thr);
-    }
-pthread_mutex_unlock(&mtx_thr);
-}
-//======================================================================
 void push_resp_list(Connect *req)
 {
 pthread_mutex_lock(&mtx_thr);
@@ -82,7 +51,6 @@ pthread_mutex_lock(&mtx_thr);
     else
         list_start = list_end = req;
 
-    ++size_list;
     ++all_req;
 pthread_mutex_unlock(&mtx_thr);
     pthread_cond_signal(&cond_list);
@@ -91,12 +59,12 @@ pthread_mutex_unlock(&mtx_thr);
 Connect *pop_resp_list(void)
 {
 pthread_mutex_lock(&mtx_thr);
-    ++num_wait_thr;
+
     while ((list_start == NULL) && (!stop_manager))
     {
         pthread_cond_wait(&cond_list, &mtx_thr);
     }
-    --num_wait_thr;
+
     Connect *req = list_start;
     if (list_start && list_start->next)
     {
@@ -105,47 +73,14 @@ pthread_mutex_lock(&mtx_thr);
     }
     else
         list_start = list_end = NULL;
-    --size_list;
-pthread_mutex_unlock(&mtx_thr);
-    if (num_wait_thr <= 1)
-        pthread_cond_signal(&cond_new_thr);
-    return req;
-}
-//======================================================================
-int wait_create_thr(int *n)
-{
-pthread_mutex_lock(&mtx_thr);
-    while (((size_list <= num_wait_thr) || (count_thr >= conf->MaxThreads)) && !stop_manager)
-    {
-        pthread_cond_wait(&cond_new_thr, &mtx_thr);
-    }
 
-    *n = count_thr;
 pthread_mutex_unlock(&mtx_thr);
-    return stop_manager;
-}
-//======================================================================
-int end_thr(int ret)
-{
-pthread_mutex_lock(&mtx_thr);
-    if (((count_thr > conf->MinThreads) && (size_list < num_wait_thr)) || ret)
-    {
-        --count_thr;
-        ret = EXIT_THR;
-    }
-pthread_mutex_unlock(&mtx_thr);
-    if (ret)
-    {
-        pthread_cond_broadcast(&cond_exit_thr);
-    }
-    return ret;
+    return req;
 }
 //======================================================================
 void close_manager()
 {
     stop_manager = 1;
-    pthread_cond_signal(&cond_new_thr);
-    pthread_cond_signal(&cond_exit_thr);
     pthread_cond_broadcast(&cond_list);
 }
 //======================================================================
@@ -153,21 +88,25 @@ static int fd_close_conn;
 //======================================================================
 void end_response(Connect *req)
 {
+    free_strings_request(req);
+    free_range(req);
+    free_fcgi_param(req);
     if (req->connKeepAlive == 0 || req->err < 0)
     { // ----- Close connect -----
-        if (req->err > NO_PRINT_LOG)// NO_PRINT_LOG(-1000) < err < 0
+        if (req->err <= -RS101)
         {
-            if (req->err <= -RS101) // NO_PRINT_LOG(-1000) < err <= -101
-            {
-                req->respStatus = -req->err;
-                send_message(req, NULL, "");
-            }
-            print_log(req);
+            req->respStatus = -req->err;
+            req->err = 0;
+            if (create_message(req, NULL) == 1)
+                return;
         }
+
+        if (req->operation != READ_REQUEST)
+            print_log(req);
 
         shutdown(req->clientSocket, SHUT_RDWR);
         close(req->clientSocket);
-        free_req(req);
+        free(req);
     pthread_mutex_lock(&mtx_conn);
         --count_conn;
     pthread_mutex_unlock(&mtx_conn);
@@ -194,8 +133,11 @@ void end_response(Connect *req)
         }
     #endif
         print_log(req);
+        init_struct_request(req);
+        init_strings_request(req);
         req->timeout = conf->TimeoutKeepAlive;
         ++req->numReq;
+        req->operation = READ_REQUEST;
         push_pollin_list(req);
     }
 }
@@ -210,44 +152,18 @@ int create_thread(int *num_proc)
     n = pthread_create(&thr, NULL, thread_client, num_proc);
     if (n)
     {
-        print_err("<%s> Error pthread_create(): %d\n", __func__, n);
+        print_err("[%d]<%s:%d> Error pthread_create(): %d\n", *num_proc, __func__, __LINE__, n);
         return n;
     }
 
     n = pthread_detach(thr);
     if (n)
     {
-        print_err("<%s> Error pthread_detach(): %d\n", __func__, n);
+        print_err("[%d]<%s:%d> Error pthread_detach(): %d\n", *num_proc, __func__, __LINE__, n);
         exit(n);
     }
 
     return 0;
-}
-//======================================================================
-void *thr_create_manager(void *par)
-{
-    int num_proc = *((int*)par);
-    int num_thr;
-
-    while (1)
-    {
-        if (wait_create_thr(&num_thr))
-            break;
-
-        int n = create_thread(&num_proc);
-        if (n)
-        {
-            print_err("[%d] <%s:%d> Error create thread: num_thr=%d, all_thr=%u, errno=%d\n", num_proc, __func__, __LINE__, num_thr, all_thr, n);
-            wait_exit_thr(num_thr);
-        }
-        else
-        {
-            ++all_thr;
-            start_thr();
-        }
-    }
-
-    return NULL;
 }
 //======================================================================
 static int servSock, uxSock;
@@ -272,16 +188,7 @@ static void sig_handler_child(int sig)
 //======================================================================
 int manager(int sockServer, int numProc, int unixSock, int to_parent)
 {
-    int n;
-    unsigned long allConn = 1, i;
-    int num_thr;
-    pthread_t thr_handler, thr_man;
-    int par[3];
-    //------------------------------------------------------------------
-    /*int rcvbuf;
-    socklen_t optlen = sizeof(rcvbuf);
-    getsockopt(unixSock, SOL_SOCKET, SO_RCVBUF, &rcvbuf, &optlen);
-    fprintf(stderr, "  <%s:%d> AF_UNIX: SO_RCVBUF=%d\n", __func__, __LINE__, rcvbuf);*/
+    unsigned long allConn = 1;
     //------------------------------------------------------------------
     uxSock = unixSock;
 
@@ -307,42 +214,36 @@ int manager(int sockServer, int numProc, int unixSock, int to_parent)
         exit(1);
     }
     //------------------------------------------------------------------
-    for (i = 0; i < conf->MinThreads; ++i)
+    pthread_t thr_handler;
+    int err = pthread_create(&thr_handler, NULL, event_handler, &numProc);
+    if (err)
     {
-        n = create_thread(&numProc);
-        if (n)
-        {
-            print_err("<%s:%d> Error create_thread() %d\n", __func__, __LINE__, i);
-            break;
-        }
-        num_thr = start_thr();
-    }
-
-    if (get_num_thr() > conf->MinThreads)
-    {
-        print_err("[%d:%s:%d] Error num threads=%d\n", numProc, __func__, __LINE__, get_num_thr());
+        print_err("<%s:%d> Error pthread_create(event_handler): %s\n", __func__, __LINE__, strerror(err));
         exit(1);
+    }
+    //------------------------------------------------------------------
+    pthread_t thr_cgi;
+    err = pthread_create(&thr_cgi, NULL, cgi_handler, &numProc);
+    if (err)
+    {
+        print_err("<%s:%d> Error pthread_create(cgi_handler): %s\n", __func__, __LINE__, strerror(err));
+        exit(1);
+    }
+    //------------------------------------------------------------------
+    int n;
+    for (n = 0; n < conf->NumThreads; ++n)
+    {
+        err = create_thread(&numProc);
+        if (err)
+        {
+            print_err("<%s:%d> Error create_thread() %d(%d)\n", __func__, __LINE__, err, conf->NumThreads);
+            exit(1);
+        }
     }
 
     printf("[%d] +++++ num threads=%d, pid=%d, uid=%d, gid=%d +++++\n", numProc,
-                                get_num_thr(), getpid(), getuid(), getgid());
-    all_thr = num_thr;
-    par[0] = numProc;
+                                n, getpid(), getuid(), getgid());
     //------------------------------------------------------------------
-    n = pthread_create(&thr_handler, NULL, event_handler, par);
-    if (n)
-    {
-        print_err("<%s:%d> Error pthread_create(event_handler): %s\n", __func__, __LINE__, strerror(n));
-        exit(1);
-    }
-    //------------------------------------------------------------------
-    n = pthread_create(&thr_man, NULL, thr_create_manager, par);
-    if (n)
-    {
-        print_err("<%s> Error pthread_create(): %s\n", __func__, strerror(n));
-        exit(1);
-    }
-
     while (1)
     {
         struct sockaddr_storage clientAddr;
@@ -369,9 +270,8 @@ int manager(int sockServer, int numProc, int unixSock, int to_parent)
         int opt = 1;
         ioctl(clientSocket, FIONBIO, &opt);
 
-        req->path = str_init(0);
-        req->scriptName = str_init(0);
-
+        init_struct_request(req);
+        init_strings_request(req);
         req->numProc = numProc;
         req->numConn = allConn++;
         req->numReq = 1;
@@ -390,25 +290,27 @@ int manager(int sockServer, int numProc, int unixSock, int to_parent)
         if (n != 0)
             print__err(req, "<%s> Error getnameinfo()=%d: %s\n", __func__, n, gai_strerror(n));
 
+        req->operation = READ_REQUEST;
         start_conn();
         push_pollin_list(req);
     }
 
-    print_err("<%d> <%s:%d>  numThr=%d; allNumThr=%u; all_req=%u; open_conn=%d\n", numProc,
-                    __func__, __LINE__, count_thr, all_thr, all_req, count_conn);
+    print_err("<%d> <%s:%d> all_req=%u; open_conn=%d\n", numProc, __func__, __LINE__, all_req, count_conn);
 
     close_manager();
-    pthread_join(thr_man, NULL);
 
     close_event_handler();
+    close_cgi_handler();
+
     pthread_join(thr_handler, NULL);
+    pthread_join(thr_cgi, NULL);
 
     free_fcgi_list();
     usleep(100000);
     return 0;
 }
 //======================================================================
-Connect *create_req(void)
+Connect *create_req()
 {
     Connect *req = NULL;
 
@@ -416,11 +318,4 @@ Connect *create_req(void)
     if (!req)
         print_err("<%s:%d> Error malloc(): %s(%d)\n", __func__, __LINE__, strerror(errno), errno);
     return req;
-}
-//======================================================================
-void free_req(Connect *req)
-{
-    str_free(&req->path);
-    str_free(&req->scriptName);
-    free(req);
 }

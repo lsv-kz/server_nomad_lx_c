@@ -119,7 +119,12 @@ int parse_ranges(Connect *req, int Len)
                 return -416;
             }
 
-            if (end >= size)
+            if (start < 0)
+            {
+                start = 0;
+                end = size - 1;
+            }
+            else if (end >= size)
                 end = size - 1;
 
             if (start <= end)

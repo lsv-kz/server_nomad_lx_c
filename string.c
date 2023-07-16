@@ -3,27 +3,20 @@
 //----------------------------------------------------------------------
 /*typedef struct {
     unsigned int len;
+    unsigned int ind;
     unsigned int size;
     int err;
     char *ptr;
 } String;*/
+static const int RESERVE = 128;
 //======================================================================
-String str_init(unsigned int n)
+void StrInit(String *s)
 {
-    String tmp;
-    tmp.len = tmp.err = 0;
-    tmp.size = n;
-    if (n)
-    {
-        tmp.ptr = malloc(tmp.size);
-        if (!tmp.ptr) tmp.err = 1;
-    }
-    else
-        tmp.ptr = NULL;
-    return tmp;
+    s->size = s->len = s->ind = s->err = 0;
+    s->ptr = NULL;
 }
 //======================================================================
-void str_free(String *s)
+void StrFree(String *s)
 {
     if (!s) return;
     if (s->ptr)
@@ -31,51 +24,68 @@ void str_free(String *s)
         free(s->ptr);
         s->ptr = NULL;
     }
-    s->size = s->len = s->err = 0;
+    s->size = s->len = s->ind = s->err = 0;
 }
 //======================================================================
-void str_reserve(String *s, unsigned int n)
+void StrClear(String *s)
 {
     if (!s) return;
+    s->size = s->len = s->ind = s->err = 0;
+}
+//======================================================================
+void StrReserve(String *s, unsigned int n)
+{
+    if (!s) return;
+    ++n;
     if ((n <= s->size) || s->err)
         return;
-
-    char *new_ptr = malloc(++n);
+    char *new_ptr = malloc(n);
     if (!new_ptr)
     {
-        s->err = 1;
+        s->err = ENOMEM;
         return;
     }
 
-    if (s->len && s->ptr)
+    if (s->ptr)
     {
-        memcpy(new_ptr, s->ptr, s->len);
+        if (s->len)
+            memcpy(new_ptr, s->ptr, s->len);
         free(s->ptr);
     }
     s->ptr = new_ptr;
     s->size = n;
+    *(s->ptr + s->len) = 0;
 }
 //======================================================================
-void str_clear(String *s)
-{
-    if (!s) return;
-    s->size = s->len = s->err = 0;
-    if (s->ptr)
-    {
-        free(s->ptr);
-        s->ptr = NULL;
-    }
-}
-//======================================================================
-void str_resize(String *s, unsigned int n)
+void StrResize(String *s, unsigned int n)
 {
     if (!s) return;
     if (s->err || (!s->ptr)) return;
     if (n >= s->len) return;
     s->len = n;
+    *(s->ptr + s->len) = 0;
 }
 //======================================================================
-void str_cpy(String *s, const char *cs)
+int StrLen(String *s)
+{
+    if (!s || s->err) return 0;
+    return s->len;
+}
+//======================================================================
+int StrSize(String *s)
+{
+    if (!s || s->err) return 0;
+    return s->size;
+}
+//======================================================================
+const char *StrPtr(String *s)
+{
+    if (!s || s->err || (!s->ptr)) return NULL;
+    *(s->ptr + s->len) = 0;
+    return s->ptr;
+}
+//======================================================================
+void StrCpy(String *s, const char *cs)
 {
     if (!s || !cs) return;
     if (s->err) return;
@@ -86,15 +96,38 @@ void str_cpy(String *s, const char *cs)
 
     if (s->size <= s->len)
     {
-        str_reserve(s, s->len + 1);
+        StrReserve(s, s->len + RESERVE);
         if (s->err)
             return;
     }
 
     memcpy(s->ptr, cs, s->len);
+    *(s->ptr + s->len) = 0;
 }
 //======================================================================
-void str_cat(String *s, const char *cs)
+void StrCpyLN(String *s, const char *cs)
+{
+    if (!s || !cs) return;
+    if (s->err) return;
+
+    s->len = strlen(cs);
+    if (s->len == 0)
+        return;
+
+    if (s->size <= s->len)
+    {
+        StrReserve(s, s->len + RESERVE);
+        if (s->err)
+            return;
+    }
+
+    memcpy(s->ptr, cs, s->len);
+    memcpy(s->ptr + s->len, "\r\n", 2);
+    s->len += 2;
+    *(s->ptr + s->len) = 0;
+}
+//======================================================================
+void StrCat(String *s, const char *cs)
 {
     if (!s || !cs) return;
     if (s->err) return;
@@ -104,21 +137,22 @@ void str_cat(String *s, const char *cs)
         return;
     if (s->size <= (s->len + len))
     {
-        str_reserve(s, s->len + len + 1);
+        StrReserve(s, s->len + len + RESERVE);
         if (s->err)
             return;
     }
 
     memcpy(s->ptr + s->len, cs, len);
     s->len += len;
+    *(s->ptr + s->len) = 0;
 }
 //======================================================================
-void str_cat_ln(String *s, const char *cs)
+void StrCatLN(String *s, const char *cs)
 {
     if (!s || s->err) return;
     if (!cs)
     {
-        str_cat(s, "\r\n");
+        StrCat(s, "\r\n");
         return;
     }
 
@@ -127,7 +161,7 @@ void str_cat_ln(String *s, const char *cs)
         return;
     if (s->size <= (s->len + len + 2))
     {
-        str_reserve(s, s->len + len + 2 + 1);
+        StrReserve(s, s->len + len + RESERVE);
         if (s->err)
             return;
     }
@@ -136,48 +170,37 @@ void str_cat_ln(String *s, const char *cs)
     s->len += len;
     memcpy(s->ptr + s->len, "\r\n", 2);
     s->len += 2;
+    *(s->ptr + s->len) = 0;
 }
 //======================================================================
-void str_n_cat(String *s, const char *cs, unsigned int len)
+void StrnCat(String *s, const char *cs, unsigned int len)
 {
     if (!s || !cs) return;
     if (s->err || !len) return;
     if (s->size <= (s->len + len))
     {
-        str_reserve(s, s->len + len + 1);
+        StrReserve(s, s->len + len + RESERVE);
         if (s->err)
             return;
     }
 
     memcpy(s->ptr + s->len, cs, len);
     s->len += len;
-}
-//======================================================================
-void str_llint(String *s, long long ll)
-{
-    if (!s || s->err) return;
-    char buf[21];
-    snprintf(buf, sizeof(buf), "%lld", ll);
-    str_cat(s, buf);
-}
-//======================================================================
-void str_llint_ln(String *s, long long ll)
-{
-    if (!s || s->err) return;
-    char buf[21];
-    snprintf(buf, sizeof(buf), "%lld", ll);
-    str_cat_ln(s, buf);
-}
-//======================================================================
-const char *str_ptr(String *s)
-{
-    if (!s || s->err || (!s->ptr)) return "";
     *(s->ptr + s->len) = 0;
-    return s->ptr;
 }
 //======================================================================
-int str_len(String *s)
+void StrCatInt(String *s, long long ll)
 {
-    if (!s || s->err) return 0;
-    return s->len;
+    if (!s || s->err) return;
+    char buf[21];
+    snprintf(buf, sizeof(buf), "%lld", ll);
+    StrCat(s, buf);
+}
+//======================================================================
+void StrCatIntLN(String *s, long long ll)
+{
+    if (!s || s->err) return;
+    char buf[21];
+    snprintf(buf, sizeof(buf), "%lld", ll);
+    StrCatLN(s, buf);
 }

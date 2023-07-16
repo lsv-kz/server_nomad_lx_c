@@ -53,20 +53,18 @@ void create_conf_file()
     fprintf(f, "PidFilePath  ?\n\n");
 
     fprintf(f, "ListenBacklog  128\n");
-    fprintf(f, "TcpCork  n\n");
-    fprintf(f, "TcpNoDelay  y\n\n");
+    fprintf(f, "TcpCork     n  # n/y\n");
+    fprintf(f, "TcpNoDelay  y  # n/y\n\n");
 
-    fprintf(f, "SendFile  y\n");
+    fprintf(f, "SendFile  y  # n/y\n");
     fprintf(f, "SndBufSize  32768\n\n");
 
-    fprintf(f, "NumCpuCores  1\n");
+    fprintf(f, "MaxWorkConnections  768\n\n");
 
-    fprintf(f, "MaxWorkConnections  768\n");
-    fprintf(f, "MaxEventConnections  100\n\n");
-
-    fprintf(f, "NumProc  4\n");
-    fprintf(f, "MaxThreads  256\n");
-    fprintf(f, "MinThreads  6\n");
+    fprintf(f, "BalancedLoad  4  # n/y\n\n");
+    
+    fprintf(f, "NumProc     4\n");
+    fprintf(f, "NumThreads  2\n");
     fprintf(f, "MaxCgiProc  30\n\n");
 
     fprintf(f, "MaxRequestsPerClient  100\n");
@@ -88,6 +86,10 @@ void create_conf_file()
 
     fprintf(f, "fastcgi {\n"
                 "  ~/env  127.0.0.1:9002\n"
+                "}\n\n");
+
+    fprintf(f, "scgi {\n"
+                "\t#/scgi_test  127.0.0.1:9009\n"
                 "}\n\n");
 
     fprintf(f, "ShowMediaFiles  N\n\n");
@@ -327,7 +329,7 @@ int find_bracket(FILE *f, char c)
     return 0;
 }
 //======================================================================
-int create_fcgi_list(fcgi_list_addr **l, const char *s1, const char *s2)
+int create_fcgi_list(fcgi_list_addr **l, const char *s1, const char *s2, enum CGI_TYPE type)
 {
     if (l == NULL)
     {
@@ -351,6 +353,7 @@ int create_fcgi_list(fcgi_list_addr **l, const char *s1, const char *s2)
         return -1;
     }
 
+    t->type = type;
     t->next = *l;
     *l = t;
     return 0;
@@ -394,18 +397,14 @@ int read_conf_file_(FILE *f)
             err = get_bool(&ln, &(c.SendFile));
         else if (!strcmp(s1, "SndBufSize") && (n == 2))
             err = get_int(&ln, &c.SndBufSize);
-        else if (!strcmp(s1, "NumCpuCores") && (n == 2))
-            err = get_int(&ln, (int*)&c.NumCpuCores);
         else if (!strcmp(s1, "MaxWorkConnections") && (n == 2))
             err = get_int(&ln, &c.MaxWorkConnections);
-        else if (!strcmp(s1, "MaxEventConnections") && (n == 2))
-            err = get_int(&ln, &c.MaxEventConnections);
+        else if (!strcmp(s1, "BalancedLoad") && (n == 2))
+            err = get_bool(&ln, &(c.BalancedLoad));
         else if (!strcmp(s1, "NumProc") && (n == 2))
             err = get_int(&ln, (int*)&c.NumProc);
-        else if (!strcmp(s1, "MaxThreads") && (n == 2))
-            err = get_int(&ln, (int*)&c.MaxThreads);
-        else if (!strcmp(s1, "MinThreads") && (n == 2))
-            err = get_int(&ln, (int*)&c.MinThreads);
+        else if (!strcmp(s1, "NumThreads") && (n == 2))
+            err = get_int(&ln, (int*)&c.NumThreads);
         else if (!strcmp(s1, "MaxCgiProc") && (n == 2))
             err = get_int(&ln, (int*)&c.MaxCgiProc);
         else if (!strcmp(s1, "MaxRequestsPerClient") && (n == 2))
@@ -483,7 +482,34 @@ int read_conf_file_(FILE *f)
                 if (get_word(&ln, s2, sizeof(s2)) <= 0)
                     return -1;
 
-                if (create_fcgi_list(&c.fcgi_list, s1, s2))
+                if (create_fcgi_list(&c.fcgi_list, s1, s2, FASTCGI))
+                    return -1;
+            }
+
+            if (ln.s[0] != '}')
+            {
+                fprintf(stderr, "<%s:%d> Error line: %u [%s]\n", __func__, __LINE__, line_, ln.s);
+                return -1;
+            }
+        }
+        else if (!strcmp(s1, "scgi") && (n == 1))
+        {
+            if (find_bracket(f, '{') == 0)
+            {
+                fprintf(stderr, "<%s:%d> Error not found \"{\", line: %u\n", __func__, __LINE__, line_);
+                return -1;
+            }
+
+            while (getLine(f, &ln) == 2)
+            {
+                char s2[256];
+                if (get_word(&ln, s1, sizeof(s1)) <= 0)
+                    return -1;
+
+                if (get_word(&ln, s2, sizeof(s2)) <= 0)
+                    return -1;
+
+                if (create_fcgi_list(&c.fcgi_list, s1, s2, SCGI))
                     return -1;
             }
 
@@ -536,27 +562,24 @@ int read_conf_file_(FILE *f)
         return -1;
     }
     //------------------------------------------------------------------
-    if (conf->MaxEventConnections <= 0)
-    {
-        fprintf(stderr, "<%s:%d> Error: MaxEventConnect=%d\n", __func__, __LINE__, conf->MaxEventConnections);
-        exit(1);
-    }
-
     if (conf->SndBufSize <= 0)
     {
         fprintf(stderr, "<%s:%d> Error: SndBufSize=%d\n", __func__, __LINE__, conf->SndBufSize);
         exit(1);
     }
     //------------------------------------------------------------------
-    if ((c.NumProc < 1) || (c.NumProc > 8))
+    if ((conf->NumProc < 1) || (conf->NumProc > PROC_LIMIT))
     {
-        fprintf(stderr, "<%s:%d> Error: NumProc = %d; [1 <= NumProc <= 8]\n", __func__, __LINE__, c.NumProc);
+        fprintf(stderr, "<%s:%d> Error: NumProc = %d; [1 <= NumProc <= 8]\n", __func__, __LINE__, conf->NumProc);
         return -1;
     }
-
-    if ((c.MinThreads > c.MaxThreads) || (c.MinThreads < 1))
+    
+    if (conf->NumProc == 1)
+        c.BalancedLoad = 'n';
+    //------------------------------------------------------------------
+    if ((c.NumThreads > 8) || (c.NumThreads < 1))
     {
-        fprintf(stderr, "<%s:%d> Error: MinThreads=%u\n", __func__, __LINE__, c.MinThreads);
+        fprintf(stderr, "<%s:%d> Error: NumThreads=%u\n", __func__, __LINE__, c.NumThreads);
         return -1;
     }
     //------------------------------------------------------------------
