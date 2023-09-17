@@ -840,6 +840,8 @@ int cgi_stdout(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 0 | 1 | 0< ]
         req->send_bytes += ret;
         if (req->cgi.len_buf == 0)
         {
+            if (req->mode_send == CHUNK_END)
+                return 0;
             req->cgi.dir = FROM_CGI;
         }
     }

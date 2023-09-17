@@ -376,16 +376,10 @@ int fcgi_stdout(Connect *r)// return [ ERR_TRY_AGAIN | -1 | 0 | 1 | 0< ]
                     if (errno == EAGAIN)
                         return ERR_TRY_AGAIN;
                     else
-                    {
-                        r->err = -1;
                         return -1;
-                    }
                 }
                 else if (ret == 0)
-                {
-                    r->err = -1;
                     return -1;
-                }
 
                 r->cgi.len_buf = ret;
                 r->cgi.p = r->cgi_buf + 8;
@@ -442,10 +436,7 @@ int fcgi_stdout(Connect *r)// return [ ERR_TRY_AGAIN | -1 | 0 | 1 | 0< ]
             if (ret == ERR_TRY_AGAIN)
                 return ERR_TRY_AGAIN;
             else
-            {
-                r->err = -1;
                 return -1;
-            }
         }
 
         r->cgi.p += ret;
@@ -454,10 +445,7 @@ int fcgi_stdout(Connect *r)// return [ ERR_TRY_AGAIN | -1 | 0 | 1 | 0< ]
         if (r->cgi.len_buf == 0)
         {
             if (r->cgi.op.fcgi == FASTCGI_CLOSE)
-            {
-
                 return 0;
-            }
 
             if (r->fcgi.dataLen == 0)
             {
@@ -465,17 +453,13 @@ int fcgi_stdout(Connect *r)// return [ ERR_TRY_AGAIN | -1 | 0 | 1 | 0< ]
                 {
                     r->fcgi.status = FCGI_READ_HEADER;
                     if (r->fcgi.len_buf <= 0)
-                    {
                         r->fcgi.ptr_rd = r->fcgi.ptr_wr = r->fcgi.buf;
-                    }
 
                     r->cgi.p = r->cgi_buf + 8;
                     r->cgi.len_buf = 0;
                 }
                 else
-                {
                     r->fcgi.status = FCGI_READ_PADDING;
-                }
             }
 
             r->cgi.dir = FROM_CGI;
@@ -499,10 +483,7 @@ int fcgi_read_http_headers(Connect *r)
         else
             num_read = CGI_BUF_SIZE - r->cgi.len_buf - 1;
         if (num_read <= 0)
-        {
-            r->err = -RS502;
             return -1;
-        }
 
         int n = read(r->fcgi.fd, r->cgi.p, num_read);
         if (n == -1)
@@ -511,16 +492,10 @@ int fcgi_read_http_headers(Connect *r)
             if (errno == EAGAIN)
                 return ERR_TRY_AGAIN;
             else
-            {
-                r->err = -RS502;
                 return -1;
-            }
         }
         else if (n == 0)
-        {
-            r->err = -RS502;
             return -1;
-        }
 
         r->fcgi.dataLen -= n;
         r->lenTail += n;
@@ -532,14 +507,9 @@ int fcgi_read_http_headers(Connect *r)
     
     int ret = cgi_find_empty_line(r);
     if (ret == 1) // empty line found
-    {
         return r->cgi.len_buf;
-    }
     else if (ret < 0) // error
-    {
-        r->err = -RS502;
         return -1;
-    }
 
     return 0;
 }
